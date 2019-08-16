@@ -6,6 +6,7 @@ package org.javolution.io;
 import java.nio.ByteBuffer;
 import java.util.concurrent.TimeUnit;
 
+// see https://mechanical-sympathy.blogspot.com/2012/10/compact-off-heap-structurestuples-in.html
 public class TestDirectMemoryLayout {
 
     private static final int NUM_RECORDS = 50 * 1000 * 1000;
