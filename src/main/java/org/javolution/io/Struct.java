@@ -2,7 +2,7 @@
  * Javolution - Java(TM) Solution for Real-Time and Embedded Systems
  * Copyright (C) 2012 - Javolution (http://javolution.org/)
  * All rights reserved.
- * 
+ *
  * Permission to use, copy, modify, and distribute this software is
  * freely granted, provided that this notice is preserved.
  */
@@ -161,12 +161,12 @@ public class Struct {
      * Configurable holding the maximum wordSize in bytes
      * (default <code>4</code>). Should be a value greater or equal to 1.
      */
-    public static final LocalContext.Parameter<Integer> MAXIMUM_ALIGNMENT = new LocalContext.Parameter<Integer>() {
-        @Override
-        protected Integer getDefault() {
-            return 4;
-        }
-    };
+//    public static final LocalContext.Parameter<Integer> MAXIMUM_ALIGNMENT = new LocalContext.Parameter<Integer>() {
+//        @Override
+//        protected Integer getDefault() {
+//            return 4;
+//        }
+//    };
 
     /**
      * Holds the outer struct if any.
@@ -325,11 +325,11 @@ public class Struct {
      * (convenience method when using Stream I/O). For better performance,
      * use of Block I/O (e.g. <code>java.nio.channels.*</code>) is recommended.
      *  This method behaves appropriately when not all of the data is available
-     *  from the input stream. Incomplete data is extremely common when the 
-     *  input stream is associated with something like a TCP connection. 
+     *  from the input stream. Incomplete data is extremely common when the
+     *  input stream is associated with something like a TCP connection.
      *  The typical usage pattern in those scenarios is to repeatedly call
      *  read() until the entire message is received.
-     *  
+     *
      * @param in the input stream being read from.
      * @return the number of bytes read (typically the {@link #size() size}
      *         of this struct.
@@ -387,9 +387,9 @@ public class Struct {
     }
 
     /**
-     * Returns this struct address (if supported by the platform). 
-     * This method allows for structs to be referenced (e.g. pointer) 
-     * from other structs. 
+     * Returns this struct address (if supported by the platform).
+     * This method allows for structs to be referenced (e.g. pointer)
+     * from other structs.
      *
      * @return the struct memory address.
      * @throws UnsupportedOperationException if not supported by the platform.
@@ -398,11 +398,14 @@ public class Struct {
      */
     public final long address() {
         try {
+            System.out.println("this.getByteBuffer().capacity(): " + this.getByteBuffer().capacity());
             Class<?> dbClass = Class.forName("sun.nio.ch.DirectBuffer");
             java.lang.reflect.Method address = dbClass.getDeclaredMethod(
                     "address", new Class[0]);
-            return ((Long) address.invoke(this.getByteBuffer(),
+            long a = ((Long) address.invoke(this.getByteBuffer(),
                     (Object[]) null)).longValue();
+            System.out.println("this.getByteBuffer().address(): " + a);
+            return a;
         } catch (Throwable error) {
             error.printStackTrace();
             throw new UnsupportedOperationException(
@@ -736,7 +739,7 @@ public class Struct {
      * Defines the specified three-dimensional array member. For predefined
      * members, the array is populated when empty; custom members should use
      * literal (populated) arrays.
-     * 
+     *
      * @param <M> Type of the Array Member
      * @param  arrayMember the three-dimensional array member.
      * @return the specified array member.
@@ -1014,7 +1017,7 @@ public class Struct {
          * Holds the bit offset of this member (if any).
          * The actual position of the bits data depends upon the endianess and
          * the word size.
-         * 
+         *
          * @return Integer representing the bit index
          */
         public final int bitIndex() {
