@@ -1,3 +1,6 @@
+
+## Do NOT clone this Project; Clone https://github.com/javolution/javolution instead!
+
 ## Javolution
 #### The Java(TM) Solution for Real-Time and Embedded Systems
 ##### Because real-time programming requires a time-predictable standard library.

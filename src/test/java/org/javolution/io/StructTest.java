@@ -37,10 +37,8 @@ public class StructTest {
         student1.name.set("John Doe"); // Null terminated (C compatible)
         int age = 2003 - student1.birth.year.get();
         student1.grades[2].set(12.5f);
-        student1.next.set(new Student());
-        Student student2 = student1.next.get();
-        student2.name.set("Dirk Haase"); // Null terminated (C compatible)
-        System.out.println(student1);
+
+        System.out.println("student1.gender.get(): " + student1.gender.get());
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         student1.write(baos);
@@ -50,8 +48,8 @@ public class StructTest {
         ByteArrayInputStream bais = new ByteArrayInputStream(bytes);
         Student student1a = new Student();
         student1a.read(bais);
-        Student student2a = student1a.next.get();
-        System.out.println(student1a.name.get());
+
+        System.out.println("student1.gender.get(): " + student1a.gender.get());
     }
 
     public enum Gender {MALE, FEMALE}
@@ -65,7 +63,7 @@ public class StructTest {
 
     public static class Student extends Struct {
         public final Enum32<Gender> gender = new Enum32<Gender>(Gender.values());
-        public final UTF8String name = new UTF8String(64);
+        public final UTF8String name = new UTF8String(128);
         public final Date birth = inner(new Date());
         public final Float32[] grades = array(new Float32[10]);
         public final Reference32<Student> next = new Reference32<Student>();
