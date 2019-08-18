@@ -15,7 +15,6 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 import org.javolution.annotations.Realtime;
-import org.javolution.context.LocalContext;
 import org.javolution.lang.MathLib;
 import org.javolution.text.TextBuilder;
 
@@ -29,7 +28,7 @@ import org.javolution.text.TextBuilder;
  *     This approach allows for dynamic loading and binding; but also makes
  *     interfacing with <code>C/C++</code> code difficult. Hence, this class for
  *     which the memory layout is defined by the initialization order of the
- *     {@link Struct}'s {@link Member members} and follows the same wordSize
+ *     {@link Struct}'s {@link AbstractMember members} and follows the same wordSize
  *      rules as <code>C/C++ structs</code>.</p>
  *
  * <p> This class (as well as the {@link Union} sub-class) facilitates:</p>
@@ -224,7 +223,7 @@ public class Struct {
     /**
      * Returns the size in bytes of this struct. The size includes
      * tail padding to satisfy the struct word size requirement
-     * (defined by the largest word size of its {@link Member members}).
+     * (defined by the largest word size of its {@link AbstractMember members}).
      *
      * @return the C/C++ <code>sizeof(this)</code>.
      */
@@ -499,7 +498,7 @@ public class Struct {
 
     /**
      * Indicates if this struct is packed (configurable).
-     * By default, {@link Member members} of a struct are aligned on the
+     * By default, {@link AbstractMember members} of a struct are aligned on the
      * boundary corresponding to the member base type; padding is performed
      * if necessary. This directive is <b>not</b> inherited by inner structs.
      * Sub-classes may change the packing directive by overriding this method.
@@ -636,7 +635,7 @@ public class Struct {
      * @throws UnsupportedOperationException if the specified array
      *         is empty and the member type is unknown.
      */
-    protected <M extends Member> M[] array(M[] arrayMember) {
+    protected <M extends AbstractMember> M[] array(M[] arrayMember) {
         boolean resetIndexSaved = _resetIndex;
         if (_resetIndex) {
             _index = 0;
@@ -722,7 +721,7 @@ public class Struct {
      * @throws UnsupportedOperationException if the specified array
      *         is empty and the member type is unknown.
      */
-    protected <M extends Member> M[][] array(M[][] arrayMember) {
+    protected <M extends AbstractMember> M[][] array(M[][] arrayMember) {
         boolean resetIndexSaved = _resetIndex;
         if (_resetIndex) {
             _index = 0;
@@ -746,7 +745,7 @@ public class Struct {
      * @throws UnsupportedOperationException if the specified array
      *         is empty and the member type is unknown.
      */
-    protected <M extends Member> M[][][] array(M[][][] arrayMember) {
+    protected <M extends AbstractMember> M[][][] array(M[][][] arrayMember) {
         boolean resetIndexSaved = _resetIndex;
         if (_resetIndex) {
             _index = 0;
@@ -914,7 +913,7 @@ public class Struct {
      *        }
      *    }[/code]
      */
-    protected class Member {
+    protected abstract class AbstractMember {
 
         /**
          * Holds the relative offset (in bytes) of this member within its struct.
@@ -942,7 +941,7 @@ public class Struct {
          *         this member data or <code>0</code> if the data is accessed
          *         at the bit level.
          */
-        protected Member(int bitLength, int wordSize) {
+        protected AbstractMember(int bitLength, int wordSize) {
             _bitLength = bitLength;
 
             // Resets index if union.
@@ -1077,6 +1076,13 @@ public class Struct {
         }
     }
 
+    protected final class Member extends AbstractMember{
+
+        Member(int bitLength, int wordSize) {
+            super(bitLength, wordSize);
+        }
+    }
+
     ///////////////////////
     // PREDEFINED FIELDS //
     ///////////////////////
@@ -1084,7 +1090,7 @@ public class Struct {
      * This class represents a UTF-8 character string, null terminated
      * (for C/C++ compatibility)
      */
-    public class UTF8String extends Member {
+    public final class UTF8String extends AbstractMember {
 
         private final UTF8ByteBufferWriter _writer = new UTF8ByteBufferWriter();
         private final UTF8ByteBufferReader _reader = new UTF8ByteBufferReader();
@@ -1152,7 +1158,7 @@ public class Struct {
      * This class represents a 8 bits boolean with <code>true</code> represented
      * by <code>1</code> and <code>false</code> represented by <code>0</code>.
      */
-    public class Bool extends Member {
+    public final class Bool extends AbstractMember {
 
         public Bool() {
             super(8, 1);
@@ -1189,7 +1195,7 @@ public class Struct {
     /**
      * This class represents a 8 bits signed integer.
      */
-    public class Signed8 extends Member {
+    public final class Signed8 extends AbstractMember {
 
         public Signed8() {
             super(8, 1);
@@ -1223,7 +1229,7 @@ public class Struct {
     /**
      * This class represents a 8 bits unsigned integer.
      */
-    public class Unsigned8 extends Member {
+    public final class Unsigned8 extends AbstractMember {
 
         public Unsigned8() {
             super(8, 1);
@@ -1257,7 +1263,7 @@ public class Struct {
     /**
      * This class represents a 16 bits signed integer.
      */
-    public class Signed16 extends Member {
+    public final class Signed16 extends AbstractMember {
 
         public Signed16() {
             super(16, 2);
@@ -1291,7 +1297,7 @@ public class Struct {
     /**
      * This class represents a 16 bits unsigned integer.
      */
-    public class Unsigned16 extends Member {
+    public final class Unsigned16 extends AbstractMember {
 
         public Unsigned16() {
             super(16, 2);
@@ -1325,7 +1331,7 @@ public class Struct {
     /**
      * This class represents a 32 bits signed integer.
      */
-    public class Signed32 extends Member {
+    public final class Signed32 extends AbstractMember {
 
         public Signed32() {
             super(32, 4);
@@ -1359,7 +1365,7 @@ public class Struct {
     /**
      * This class represents a 32 bits unsigned integer.
      */
-    public class Unsigned32 extends Member {
+    public final class Unsigned32 extends AbstractMember {
 
         public Unsigned32() {
             super(32, 4);
@@ -1393,7 +1399,7 @@ public class Struct {
     /**
      * This class represents a 64 bits signed integer.
      */
-    public class Signed64 extends Member {
+    public class Signed64 extends AbstractMember {
 
         public Signed64() {
             super(64, 8);
@@ -1428,7 +1434,7 @@ public class Struct {
      * This class represents an arbitrary size (unsigned) bit field with
      * no word size constraint (they can straddle words boundaries).
      */
-    public class BitField extends Member {
+    public final class BitField extends AbstractMember {
 
         public BitField(int nbrOfBits) {
             super(nbrOfBits, 0);
@@ -1464,7 +1470,7 @@ public class Struct {
     /**
      * This class represents a 32 bits float (C/C++/Java <code>float</code>).
      */
-    public class Float32 extends Member {
+    public final class Float32 extends AbstractMember {
 
         public Float32() {
             super(32, 4);
@@ -1488,7 +1494,7 @@ public class Struct {
     /**
      * This class represents a 64 bits float (C/C++/Java <code>double</code>).
      */
-    public class Float64 extends Member {
+    public final class Float64 extends AbstractMember {
 
         public Float64() {
             super(64, 8);
@@ -1519,7 +1525,7 @@ public class Struct {
      *           can be created at the address specified by {@link #value}
      *           (using JNI) and the reference {@link #set set} accordingly.</p>
      */
-    public class Reference32<S extends Struct> extends Member {
+    public final class Reference32<S extends Struct> extends AbstractMember {
 
         private S _struct;
 
@@ -1566,7 +1572,7 @@ public class Struct {
      *           can be created at the address specified by {@link #value}
      *           (using JNI) and then {@link #set set} to the reference.</p>
      */
-    public class Reference64<S extends Struct> extends Member {
+    public final class Reference64<S extends Struct> extends AbstractMember {
 
         private S _struct;
 
@@ -1606,7 +1612,7 @@ public class Struct {
     /**
      * This class represents a 8 bits {@link Enum}.
      */
-    public class Enum8<T extends Enum<T>> extends Member {
+    public final class Enum8<T extends Enum<T>> extends AbstractMember {
 
         private final T[] _values;
 
@@ -1645,7 +1651,7 @@ public class Struct {
     /**
      * This class represents a 16 bits {@link Enum}.
      */
-    public class Enum16<T extends Enum<T>> extends Member {
+    public final class Enum16<T extends Enum<T>> extends AbstractMember {
 
         private final T[] _values;
 
@@ -1684,7 +1690,7 @@ public class Struct {
     /**
      * This class represents a 32 bits {@link Enum}.
      */
-    public class Enum32<T extends Enum<T>> extends Member {
+    public final class Enum32<T extends Enum<T>> extends AbstractMember {
 
         private final T[] _values;
 
@@ -1723,7 +1729,7 @@ public class Struct {
     /**
      * This class represents a 64 bits {@link Enum}.
      */
-    public class Enum64<T extends Enum<T>> extends Member {
+    public final class Enum64<T extends Enum<T>> extends AbstractMember {
 
         private final T[] _values;
 
