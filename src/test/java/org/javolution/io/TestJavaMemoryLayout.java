@@ -5,7 +5,13 @@ import java.util.concurrent.TimeUnit;
 public class TestJavaMemoryLayout {
     private static final int NUM_RECORDS = 50 * 1000 * 1000;
 
-    private static JavaMemoryTrade[] trades;
+    private static JavaMemoryTrade[] trades = new JavaMemoryTrade[NUM_RECORDS];
+
+    static {
+        for (int i = 0; i < NUM_RECORDS; i++) {
+            trades[i] = new JavaMemoryTrade();
+        }
+    }
 
     public static void main(final String[] args) {
         for (int i = 0; i < 5; i++) {
@@ -47,7 +53,6 @@ public class TestJavaMemoryLayout {
     }
 
     public static void init() {
-        trades = new JavaMemoryTrade[NUM_RECORDS];
 
         final byte[] londonStockExchange = {'X', 'L', 'O', 'N'};
         final int venueCode = pack(londonStockExchange);
@@ -56,8 +61,7 @@ public class TestJavaMemoryLayout {
         final int instrumentCode = pack(billiton);
 
         for (int i = 0; i < NUM_RECORDS; i++) {
-            JavaMemoryTrade trade = new JavaMemoryTrade();
-            trades[i] = trade;
+            final JavaMemoryTrade trade = trades[i];
 
             trade.setTradeId(i);
             trade.setClientId(1);

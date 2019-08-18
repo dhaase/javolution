@@ -41,7 +41,7 @@ public abstract class Union extends Struct {
     /**
      * Default constructor.
      */
-    public Union() {}
+    protected Union() {}
 
     /**
      * Returns <code>true</code>.

@@ -154,7 +154,7 @@ import org.javolution.text.TextBuilder;
  */
 @SuppressWarnings("unchecked")
 @Realtime
-public class Struct {
+public abstract class Struct {
 
     /**
      * Configurable holding the maximum wordSize in bytes
@@ -167,221 +167,91 @@ public class Struct {
 //        }
 //    };
 
-    /**
-     * Holds the outer struct if any.
-     */
-    Struct _outer;
-    /**
-     * Holds the byte buffer backing the struct (top struct).
-     */
-    ByteBuffer _byteBuffer;
-    /**
-     * Holds the offset of this struct relative to the outer struct or
-     * to the byte buffer if there is no outer.
-     */
-    int _outerOffset;
+    private static final Class<? extends Bool[]> BOOL = new Bool[0].getClass();
+    private static final Class<? extends Float32[]> FLOAT_32 = new Float32[0]
+            .getClass();
+    private static final Class<? extends Float64[]> FLOAT_64 = new Float64[0]
+            .getClass();
+    private static final char[] HEXA = { '0', '1', '2', '3', '4', '5', '6',
+            '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
+    private static final Class<? extends Signed16[]> SIGNED_16 = new Signed16[0]
+            .getClass();
+    private static final Class<? extends Signed32[]> SIGNED_32 = new Signed32[0]
+            .getClass();
+    private static final Class<? extends Signed64[]> SIGNED_64 = new Signed64[0]
+            .getClass();
+    private static final Class<? extends Signed8[]> SIGNED_8 = new Signed8[0]
+            .getClass();
+    private static final Class<? extends Unsigned16[]> UNSIGNED_16 = new Unsigned16[0]
+            .getClass();
+    private static final Class<? extends Unsigned32[]> UNSIGNED_32 = new Unsigned32[0]
+            .getClass();
+    private static final Class<? extends Unsigned8[]> UNSIGNED_8 = new Unsigned8[0]
+            .getClass();
     /**
      * Holds this struct alignment in bytes (largest word size of its members).
      */
     int _alignment = 1;
-    /**
-     * Holds this struct's length.
-     */
-    int _length;
-    /**
-     * Holds the index position during construction.
-     * This is the index a the first unused byte available.
-     */
-    int _index;
-    /**
-     * Holds the word size during construction (for bit fields).
-     * This is the size of the last word used.
-     */
-    int _wordSize;
     /**
      * Holds the bits used in the word during construction (for bit fields).
      * This is the number of bits used in the last word.
      */
     int _bitsUsed;
     /**
+     * Holds the byte buffer backing the struct (top struct).
+     */
+    ByteBuffer _byteBuffer;
+    /**
+     * Holds bytes array for Stream I/O when byteBuffer has no intrinsic array.
+     */
+    byte[] _bytes;
+    /**
+     * Holds the index position during construction.
+     * This is the index a the first unused byte available.
+     */
+    int _index;
+    /**
+     * Holds this struct's length.
+     */
+    int _length;
+    /**
+     * Holds the outer struct if any.
+     */
+    Struct _outer;
+    /**
+     * Holds the offset of this struct relative to the outer struct or
+     * to the byte buffer if there is no outer.
+     */
+    int _outerOffset;
+    /**
      * Indicates if the index has to be reset for each new field (
      * <code>true</code> only for Union subclasses).
      */
     boolean _resetIndex;
     /**
-     * Holds bytes array for Stream I/O when byteBuffer has no intrinsic array.
+     * Holds the word size during construction (for bit fields).
+     * This is the size of the last word used.
      */
-    byte[] _bytes;
+    int _wordSize;
 
     /**
      * Default constructor.
      */
-    public Struct() {
+    protected Struct() {
         _resetIndex = isUnion();
     }
 
-    /**
-     * Returns the size in bytes of this struct. The size includes
-     * tail padding to satisfy the struct word size requirement
-     * (defined by the largest word size of its {@link AbstractMember members}).
-     *
-     * @return the C/C++ <code>sizeof(this)</code>.
-     */
-    public final int size() {
-        return (_alignment <= 1) ? _length
-                : ((_length + _alignment - 1) / _alignment) * _alignment;
+    private static byte readByte(int index, ByteBuffer byteBuffer) {
+        return (index < byteBuffer.limit()) ? byteBuffer.get(index) : 0;
     }
 
-    /**
-     * Returns the outer of this struct or <code>null</code> if this struct
-     * is not an inner struct.
-     *
-     * @return the outer struct or <code>null</code>.
-     */
-    public Struct outer() {
-        return _outer;
-    }
+    ///////////////////
+    // CONFIGURATION //
+    ///////////////////
 
-    /**
-     * Returns the byte buffer for this struct. This method will allocate
-     * a new <b>direct</b> buffer if none has been set.
-     *
-     * <p> Changes to the buffer's content are visible in this struct,
-     *     and vice versa.</p>
-     * <p> The buffer of an inner struct is the same as its parent struct.</p>
-     * <p> If no byte buffer has been {@link Struct#setByteBuffer set},
-     *     a direct buffer is allocated with a capacity equals to this
-     *     struct's {@link Struct#size() size}.</p>
-     *
-     * @return the current byte buffer or a new direct buffer if none set.
-     * @see #setByteBuffer
-     */
-    public final ByteBuffer getByteBuffer() {
-        if (_outer != null) return _outer.getByteBuffer();
-        return (_byteBuffer != null) ? _byteBuffer : newBuffer();
-    }
-
-    private synchronized ByteBuffer newBuffer() {
-        if (_byteBuffer != null) return _byteBuffer; // Synchronized check.
-        ByteBuffer bf = ByteBuffer.allocateDirect(size());
-        bf.order(byteOrder());
-        setByteBuffer(bf, 0);
-        return _byteBuffer;
-    }
-
-    /**
-     * Sets the current byte buffer for this struct.
-     * The specified byte buffer can be mapped to memory for direct memory
-     * access or can wrap a shared byte array for I/O purpose
-     * (e.g. <code>DatagramPacket</code>).
-     * The capacity of the specified byte buffer should be at least the
-     * {@link Struct#size() size} of this struct plus the offset position.
-     *
-     * @param byteBuffer the new byte buffer.
-     * @param position the position of this struct in the specified byte buffer.
-     * @return <code>this</code>
-     * @throws IllegalArgumentException if the specified byteBuffer has a
-     *         different byte order than this struct.
-     * @throws UnsupportedOperationException if this struct is an inner struct.
-     * @see #byteOrder()
-     */
-    public final Struct setByteBuffer(ByteBuffer byteBuffer, int position) {
-        if (byteBuffer.order() != byteOrder()) throw new IllegalArgumentException(
-                "The byte order of the specified byte buffer"
-                        + " is different from this struct byte order");
-        if (_outer != null) throw new UnsupportedOperationException(
-                "Inner struct byte buffer is inherited from outer");
-        _byteBuffer = byteBuffer;
-        _outerOffset = position;
-        return this;
-    }
-
-    /**
-     * Sets the byte position of this struct within its byte buffer.
-     *
-     * @param position the position of this struct in its byte buffer.
-     * @return <code>this</code>
-     * @throws UnsupportedOperationException if this struct is an inner struct.
-     */
-    public final Struct setByteBufferPosition(int position) {
-        return setByteBuffer(this.getByteBuffer(), position);
-    }
-
-    /**
-     * Returns the absolute byte position of this struct within its associated
-     * {@link #getByteBuffer byte buffer}.
-     *
-     * @return the absolute position of this struct (can be an inner struct)
-     *         in the byte buffer.
-     */
-    public final int getByteBufferPosition() {
-        return (_outer != null) ? _outer.getByteBufferPosition() + _outerOffset
-                : _outerOffset;
-    }
-
-    /**
-     * Reads this struct from the specified input stream
-     * (convenience method when using Stream I/O). For better performance,
-     * use of Block I/O (e.g. <code>java.nio.channels.*</code>) is recommended.
-     *  This method behaves appropriately when not all of the data is available
-     *  from the input stream. Incomplete data is extremely common when the
-     *  input stream is associated with something like a TCP connection.
-     *  The typical usage pattern in those scenarios is to repeatedly call
-     *  read() until the entire message is received.
-     *
-     * @param in the input stream being read from.
-     * @return the number of bytes read (typically the {@link #size() size}
-     *         of this struct.
-     * @throws IOException if an I/O error occurs.
-     */
-    public int read(InputStream in) throws IOException {
-        ByteBuffer buffer = getByteBuffer();
-        int size = size();
-        int remaining = size - buffer.position();
-        if (remaining == 0) remaining = size;// at end so move to beginning
-        int alreadyRead = size - remaining; // typically 0
-        if (buffer.hasArray()) {
-            int offset = buffer.arrayOffset() + getByteBufferPosition();
-            int bytesRead = in.read(buffer.array(), offset + alreadyRead,
-                    remaining);
-            buffer.position(getByteBufferPosition() + alreadyRead + bytesRead
-                    - offset);
-            return bytesRead;
-        } else {
-            synchronized (buffer) {
-                if (_bytes == null) {
-                    _bytes = new byte[size()];
-                }
-                int bytesRead = in.read(_bytes, 0, remaining);
-                buffer.position(getByteBufferPosition() + alreadyRead);
-                buffer.put(_bytes, 0, bytesRead);
-                return bytesRead;
-            }
-        }
-    }
-
-    /**
-     * Writes this struct to the specified output stream
-     * (convenience method when using Stream I/O). For better performance,
-     * use of Block I/O (e.g. <code>java.nio.channels.*</code>) is recommended.
-     *
-     * @param out the output stream to write to.
-     * @throws IOException if an I/O error occurs.
-     */
-    public void write(OutputStream out) throws IOException {
-        ByteBuffer buffer = getByteBuffer();
-        if (buffer.hasArray()) {
-            int offset = buffer.arrayOffset() + getByteBufferPosition();
-            out.write(buffer.array(), offset, size());
-        } else {
-            synchronized (buffer) {
-                if (_bytes == null) {
-                    _bytes = new byte[size()];
-                }
-                buffer.position(getByteBufferPosition());
-                buffer.get(_bytes);
-                out.write(_bytes);
-            }
+    private static void writeByte(int index, ByteBuffer byteBuffer, byte value) {
+        if (index < byteBuffer.limit()) {
+            byteBuffer.put(index, value);
         }
     }
 
@@ -410,129 +280,6 @@ public class Struct {
             throw new UnsupportedOperationException(
                     "Method Struct.address() not supported on this platform.");
         }
-    }
-
-    /**
-     * Returns the <code>String</code> representation of this struct
-     * in the form of its constituing bytes (hexadecimal). For example:[code]
-     *     public static class Student extends Struct {
-     *         Utf8String name  = new Utf8String(16);
-     *         Unsigned16 year  = new Unsigned16();
-     *         Float32    grade = new Float32();
-     *     }
-     *     Student student = new Student();
-     *     student.name.set("John Doe");
-     *     student.year.set(2003);
-     *     student.grade.set(12.5f);
-     *     System.out.println(student);
-     *
-     *     4A 6F 68 6E 20 44 6F 65 00 00 00 00 00 00 00 00
-     *     07 D3 00 00 41 48 00 00[/code]
-     *
-     * @return a hexadecimal representation of the bytes content for this
-     *         struct.
-     */
-    public String toString() {
-        TextBuilder tmp = new TextBuilder();
-        final int size = size();
-        final ByteBuffer buffer = getByteBuffer();
-        final int start = getByteBufferPosition();
-        for (int i = 0; i < size; i++) {
-            int b = buffer.get(start + i) & 0xFF;
-            tmp.append(HEXA[b >> 4]);
-            tmp.append(HEXA[b & 0xF]);
-            tmp.append(((i & 0xF) == 0xF) ? '\n' : ' ');
-        }
-        return tmp.toString();
-    }
-
-    private static final char[] HEXA = { '0', '1', '2', '3', '4', '5', '6',
-            '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
-
-    ///////////////////
-    // CONFIGURATION //
-    ///////////////////
-    /**
-     * Indicates if this struct's members are mapped to the same location
-     * in memory (default <code>false</code>). This method is useful for
-     * applications extending {@link Struct} with new member types in order to
-     * create unions from these new structs. For example:[code]
-     * public abstract class FortranStruct extends Struct {
-     *     public class FortranString extends Member {...}
-     *     protected FortranString[] array(FortranString[] array, int stringLength) { ... }
-     * }
-     * public abstract class FortranUnion extends FortranStruct {
-     *     // Inherits new members and methods.
-     *     public final isUnion() {
-     *         return true;
-     *     }
-     * }[/code]
-     *
-     * @return <code>true</code> if this struct's members are mapped to
-     *         to the same location in memory; <code>false</code>
-     *         otherwise.
-     * @see Union
-     */
-    public boolean isUnion() {
-        return false;
-    }
-
-    /**
-     * Returns the byte order for this struct (configurable).
-     * The byte order is inherited by inner structs. Sub-classes may change
-     * the byte order by overriding this method. For example:[code]
-     * public class TopStruct extends Struct {
-     *     ... // Members initialization.
-     *     public ByteOrder byteOrder() {
-     *         // TopStruct and its inner structs use hardware byte order.
-     *         return ByteOrder.nativeOrder();
-     *    }
-     * }}[/code]
-     *
-     * @return the byte order when reading/writing multibyte values
-     *         (default: network byte order, <code>BIG_ENDIAN</code>).
-     */
-    public ByteOrder byteOrder() {
-        return (_outer != null) ? _outer.byteOrder() : ByteOrder.BIG_ENDIAN;
-    }
-
-    /**
-     * Indicates if this struct is packed (configurable).
-     * By default, {@link AbstractMember members} of a struct are aligned on the
-     * boundary corresponding to the member base type; padding is performed
-     * if necessary. This directive is <b>not</b> inherited by inner structs.
-     * Sub-classes may change the packing directive by overriding this method.
-     * For example:[code]
-     * public class MyStruct extends Struct {
-     *     ... // Members initialization.
-     *     public boolean isPacked() {
-     *         return true; // MyStruct is packed.
-     *     }
-     * }}[/code]
-     *
-     * @return <code>true</code> if word size requirements are ignored.
-     *         <code>false</code> otherwise (default).
-     */
-    public boolean isPacked() {
-        return false;
-    }
-
-    /**
-     * Defines the specified struct as inner of this struct.
-     *
-     * @param <S> Type of the Inner Struct
-     * @param struct the inner struct.
-     * @return the specified struct.
-     * @throws IllegalArgumentException if the specified struct is already
-     *         an inner struct.
-     */
-    protected <S extends Struct> S inner(S struct) {
-        if (struct._outer != null) throw new IllegalArgumentException(
-                "struct: Already an inner struct");
-        Member inner = new Member(struct.size() << 3, struct._alignment); // Update indexes.
-        struct._outer = this;
-        struct._outerOffset = inner.offset();
-        return (S) struct;
     }
 
     /**
@@ -690,26 +437,6 @@ public class Struct {
         return (M[]) arrayMember;
     }
 
-    private static final Class<? extends Bool[]> BOOL = new Bool[0].getClass();
-    private static final Class<? extends Signed8[]> SIGNED_8 = new Signed8[0]
-            .getClass();
-    private static final Class<? extends Unsigned8[]> UNSIGNED_8 = new Unsigned8[0]
-            .getClass();
-    private static final Class<? extends Signed16[]> SIGNED_16 = new Signed16[0]
-            .getClass();
-    private static final Class<? extends Unsigned16[]> UNSIGNED_16 = new Unsigned16[0]
-            .getClass();
-    private static final Class<? extends Signed32[]> SIGNED_32 = new Signed32[0]
-            .getClass();
-    private static final Class<? extends Unsigned32[]> UNSIGNED_32 = new Unsigned32[0]
-            .getClass();
-    private static final Class<? extends Signed64[]> SIGNED_64 = new Signed64[0]
-            .getClass();
-    private static final Class<? extends Float32[]> FLOAT_32 = new Float32[0]
-            .getClass();
-    private static final Class<? extends Float64[]> FLOAT_64 = new Float64[0]
-            .getClass();
-
     /**
      * Defines the specified two-dimensional array member. For predefined
      * members, the array is populated when empty; custom members should use
@@ -780,6 +507,190 @@ public class Struct {
     }
 
     /**
+     * Returns the byte order for this struct (configurable).
+     * The byte order is inherited by inner structs. Sub-classes may change
+     * the byte order by overriding this method. For example:[code]
+     * public class TopStruct extends Struct {
+     *     ... // Members initialization.
+     *     public ByteOrder byteOrder() {
+     *         // TopStruct and its inner structs use hardware byte order.
+     *         return ByteOrder.nativeOrder();
+     *    }
+     * }}[/code]
+     *
+     * @return the byte order when reading/writing multibyte values
+     *         (default: network byte order, <code>BIG_ENDIAN</code>).
+     */
+    public ByteOrder byteOrder() {
+        return (_outer != null) ? _outer.byteOrder() : ByteOrder.BIG_ENDIAN;
+    }
+
+    /**
+     * Returns the byte buffer for this struct. This method will allocate
+     * a new <b>direct</b> buffer if none has been set.
+     *
+     * <p> Changes to the buffer's content are visible in this struct,
+     *     and vice versa.</p>
+     * <p> The buffer of an inner struct is the same as its parent struct.</p>
+     * <p> If no byte buffer has been {@link Struct#setByteBuffer set},
+     *     a direct buffer is allocated with a capacity equals to this
+     *     struct's {@link Struct#size() size}.</p>
+     *
+     * @return the current byte buffer or a new direct buffer if none set.
+     * @see #setByteBuffer
+     */
+    public final ByteBuffer getByteBuffer() {
+        if (_outer != null) return _outer.getByteBuffer();
+        return (_byteBuffer != null) ? _byteBuffer : newBuffer();
+    }
+
+    /**
+     * Returns the absolute byte position of this struct within its associated
+     * {@link #getByteBuffer byte buffer}.
+     *
+     * @return the absolute position of this struct (can be an inner struct)
+     *         in the byte buffer.
+     */
+    public final int getByteBufferPosition() {
+        return (_outer != null) ? _outer.getByteBufferPosition() + _outerOffset
+                : _outerOffset;
+    }
+
+    /**
+     * Sets the byte position of this struct within its byte buffer.
+     *
+     * @param position the position of this struct in its byte buffer.
+     * @return <code>this</code>
+     * @throws UnsupportedOperationException if this struct is an inner struct.
+     */
+    public final Struct setByteBufferPosition(int position) {
+        return setByteBuffer(this.getByteBuffer(), position);
+    }
+
+    /**
+     * Defines the specified struct as inner of this struct.
+     *
+     * @param <S> Type of the Inner Struct
+     * @param struct the inner struct.
+     * @return the specified struct.
+     * @throws IllegalArgumentException if the specified struct is already
+     *         an inner struct.
+     */
+    protected <S extends Struct> S inner(S struct) {
+        if (struct._outer != null) throw new IllegalArgumentException(
+                "struct: Already an inner struct");
+        Member inner = new Member(struct.size() << 3, struct._alignment); // Update indexes.
+        struct._outer = this;
+        struct._outerOffset = inner.offset();
+        return (S) struct;
+    }
+
+    /**
+     * Indicates if this struct is packed (configurable).
+     * By default, {@link AbstractMember members} of a struct are aligned on the
+     * boundary corresponding to the member base type; padding is performed
+     * if necessary. This directive is <b>not</b> inherited by inner structs.
+     * Sub-classes may change the packing directive by overriding this method.
+     * For example:[code]
+     * public class MyStruct extends Struct {
+     *     ... // Members initialization.
+     *     public boolean isPacked() {
+     *         return true; // MyStruct is packed.
+     *     }
+     * }}[/code]
+     *
+     * @return <code>true</code> if word size requirements are ignored.
+     *         <code>false</code> otherwise (default).
+     */
+    public boolean isPacked() {
+        return false;
+    }
+
+    /**
+     * Indicates if this struct's members are mapped to the same location
+     * in memory (default <code>false</code>). This method is useful for
+     * applications extending {@link Struct} with new member types in order to
+     * create unions from these new structs. For example:[code]
+     * public abstract class FortranStruct extends Struct {
+     *     public class FortranString extends Member {...}
+     *     protected FortranString[] array(FortranString[] array, int stringLength) { ... }
+     * }
+     * public abstract class FortranUnion extends FortranStruct {
+     *     // Inherits new members and methods.
+     *     public final isUnion() {
+     *         return true;
+     *     }
+     * }[/code]
+     *
+     * @return <code>true</code> if this struct's members are mapped to
+     *         to the same location in memory; <code>false</code>
+     *         otherwise.
+     * @see Union
+     */
+    public boolean isUnion() {
+        return false;
+    }
+
+    private synchronized ByteBuffer newBuffer() {
+        if (_byteBuffer != null) return _byteBuffer; // Synchronized check.
+        ByteBuffer bf = ByteBuffer.allocateDirect(size());
+        bf.order(byteOrder());
+        setByteBuffer(bf, 0);
+        return _byteBuffer;
+    }
+
+    /**
+     * Returns the outer of this struct or <code>null</code> if this struct
+     * is not an inner struct.
+     *
+     * @return the outer struct or <code>null</code>.
+     */
+    public Struct outer() {
+        return _outer;
+    }
+
+    /**
+     * Reads this struct from the specified input stream
+     * (convenience method when using Stream I/O). For better performance,
+     * use of Block I/O (e.g. <code>java.nio.channels.*</code>) is recommended.
+     *  This method behaves appropriately when not all of the data is available
+     *  from the input stream. Incomplete data is extremely common when the
+     *  input stream is associated with something like a TCP connection.
+     *  The typical usage pattern in those scenarios is to repeatedly call
+     *  read() until the entire message is received.
+     *
+     * @param in the input stream being read from.
+     * @return the number of bytes read (typically the {@link #size() size}
+     *         of this struct.
+     * @throws IOException if an I/O error occurs.
+     */
+    public int read(InputStream in) throws IOException {
+        ByteBuffer buffer = getByteBuffer();
+        int size = size();
+        int remaining = size - buffer.position();
+        if (remaining == 0) remaining = size;// at end so move to beginning
+        int alreadyRead = size - remaining; // typically 0
+        if (buffer.hasArray()) {
+            int offset = buffer.arrayOffset() + getByteBufferPosition();
+            int bytesRead = in.read(buffer.array(), offset + alreadyRead,
+                    remaining);
+            buffer.position(getByteBufferPosition() + alreadyRead + bytesRead
+                    - offset);
+            return bytesRead;
+        } else {
+            synchronized (buffer) {
+                if (_bytes == null) {
+                    _bytes = new byte[size()];
+                }
+                int bytesRead = in.read(_bytes, 0, remaining);
+                buffer.position(getByteBufferPosition() + alreadyRead);
+                buffer.put(_bytes, 0, bytesRead);
+                return bytesRead;
+            }
+        }
+    }
+
+    /**
      * Reads the specified bits from this Struct as an long (signed) integer
      * value.
      *
@@ -828,8 +739,102 @@ public class Struct {
         }
     }
 
-    private static byte readByte(int index, ByteBuffer byteBuffer) {
-        return (index < byteBuffer.limit()) ? byteBuffer.get(index) : 0;
+    /**
+     * Sets the current byte buffer for this struct.
+     * The specified byte buffer can be mapped to memory for direct memory
+     * access or can wrap a shared byte array for I/O purpose
+     * (e.g. <code>DatagramPacket</code>).
+     * The capacity of the specified byte buffer should be at least the
+     * {@link Struct#size() size} of this struct plus the offset position.
+     *
+     * @param byteBuffer the new byte buffer.
+     * @param position the position of this struct in the specified byte buffer.
+     * @return <code>this</code>
+     * @throws IllegalArgumentException if the specified byteBuffer has a
+     *         different byte order than this struct.
+     * @throws UnsupportedOperationException if this struct is an inner struct.
+     * @see #byteOrder()
+     */
+    public final Struct setByteBuffer(ByteBuffer byteBuffer, int position) {
+        if (byteBuffer.order() != byteOrder()) throw new IllegalArgumentException(
+                "The byte order of the specified byte buffer"
+                        + " is different from this struct byte order");
+        if (_outer != null) throw new UnsupportedOperationException(
+                "Inner struct byte buffer is inherited from outer");
+        _byteBuffer = byteBuffer;
+        _outerOffset = position;
+        return this;
+    }
+
+    /**
+     * Returns the size in bytes of this struct. The size includes
+     * tail padding to satisfy the struct word size requirement
+     * (defined by the largest word size of its {@link AbstractMember members}).
+     *
+     * @return the C/C++ <code>sizeof(this)</code>.
+     */
+    public final int size() {
+        return (_alignment <= 1) ? _length
+                : ((_length + _alignment - 1) / _alignment) * _alignment;
+    }
+
+    /**
+     * Returns the <code>String</code> representation of this struct
+     * in the form of its constituing bytes (hexadecimal). For example:[code]
+     *     public static class Student extends Struct {
+     *         Utf8String name  = new Utf8String(16);
+     *         Unsigned16 year  = new Unsigned16();
+     *         Float32    grade = new Float32();
+     *     }
+     *     Student student = new Student();
+     *     student.name.set("John Doe");
+     *     student.year.set(2003);
+     *     student.grade.set(12.5f);
+     *     System.out.println(student);
+     *
+     *     4A 6F 68 6E 20 44 6F 65 00 00 00 00 00 00 00 00
+     *     07 D3 00 00 41 48 00 00[/code]
+     *
+     * @return a hexadecimal representation of the bytes content for this
+     *         struct.
+     */
+    public String toString() {
+        TextBuilder tmp = new TextBuilder();
+        final int size = size();
+        final ByteBuffer buffer = getByteBuffer();
+        final int start = getByteBufferPosition();
+        for (int i = 0; i < size; i++) {
+            int b = buffer.get(start + i) & 0xFF;
+            tmp.append(HEXA[b >> 4]);
+            tmp.append(HEXA[b & 0xF]);
+            tmp.append(((i & 0xF) == 0xF) ? '\n' : ' ');
+        }
+        return tmp.toString();
+    }
+
+    /**
+     * Writes this struct to the specified output stream
+     * (convenience method when using Stream I/O). For better performance,
+     * use of Block I/O (e.g. <code>java.nio.channels.*</code>) is recommended.
+     *
+     * @param out the output stream to write to.
+     * @throws IOException if an I/O error occurs.
+     */
+    public void write(OutputStream out) throws IOException {
+        ByteBuffer buffer = getByteBuffer();
+        if (buffer.hasArray()) {
+            int offset = buffer.arrayOffset() + getByteBufferPosition();
+            out.write(buffer.array(), offset, size());
+        } else {
+            synchronized (buffer) {
+                if (_bytes == null) {
+                    _bytes = new byte[size()];
+                }
+                buffer.position(getByteBufferPosition());
+                buffer.get(_bytes);
+                out.write(_bytes);
+            }
+        }
     }
 
     /**
@@ -888,15 +893,10 @@ public class Struct {
         }
     }
 
-    private static void writeByte(int index, ByteBuffer byteBuffer, byte value) {
-        if (index < byteBuffer.limit()) {
-            byteBuffer.put(index, value);
-        }
-    }
-
     /////////////
     // MEMBERS //
     /////////////
+
     /**
      * This inner class represents the base class for all {@link Struct}
      * members. It allows applications to define additional member types.
@@ -916,10 +916,6 @@ public class Struct {
     protected abstract class AbstractMember {
 
         /**
-         * Holds the relative offset (in bytes) of this member within its struct.
-         */
-        private final int _offset;
-        /**
          * Holds the relative bit offset of this member to its struct offset.
          */
         private final int _bitIndex;
@@ -927,6 +923,10 @@ public class Struct {
          * Holds the bit length of this member.
          */
         private final int _bitLength;
+        /**
+         * Holds the relative offset (in bytes) of this member within its struct.
+         */
+        private final int _offset;
 
         /**
          * Base constructor for custom member types.
@@ -994,25 +994,6 @@ public class Struct {
         }
 
         /**
-         * Returns the outer {@link Struct struct} container.
-         *
-         * @return the outer struct.
-         */
-        public final Struct struct() {
-            return Struct.this;
-        }
-
-        /**
-         * Returns the byte offset of this member in its struct.
-         * Equivalent to C/C++ <code>offsetof(struct(), this)</code>
-         *
-         * @return the offset of this member in the Struct.
-         */
-        public final int offset() {
-            return _offset;
-        }
-
-        /**
          * Holds the bit offset of this member (if any).
          * The actual position of the bits data depends upon the endianess and
          * the word size.
@@ -1043,6 +1024,26 @@ public class Struct {
             return word & mask;
         }
 
+        // Returns the member long value.
+        final long get(int wordSize, long word) {
+            final int shift = (byteOrder() == ByteOrder.BIG_ENDIAN) ? (wordSize << 3)
+                    - bitIndex() - bitLength()
+                    : bitIndex();
+            word >>= shift;
+            long mask = 0xFFFFFFFFFFFFFFFFL >>> (64 - bitLength());
+            return word & mask;
+        }
+
+        /**
+         * Returns the byte offset of this member in its struct.
+         * Equivalent to C/C++ <code>offsetof(struct(), this)</code>
+         *
+         * @return the offset of this member in the Struct.
+         */
+        public final int offset() {
+            return _offset;
+        }
+
         // Sets the member int value.
         final int set(int value, int wordSize, int word) {
             final int shift = (byteOrder() == ByteOrder.BIG_ENDIAN) ? (wordSize << 3)
@@ -1052,16 +1053,6 @@ public class Struct {
             mask <<= shift;
             value <<= shift;
             return (word & ~mask) | (value & mask);
-        }
-
-        // Returns the member long value.
-        final long get(int wordSize, long word) {
-            final int shift = (byteOrder() == ByteOrder.BIG_ENDIAN) ? (wordSize << 3)
-                    - bitIndex() - bitLength()
-                    : bitIndex();
-            word >>= shift;
-            long mask = 0xFFFFFFFFFFFFFFFFL >>> (64 - bitLength());
-            return word & mask;
         }
 
         // Sets the member long value.
@@ -1074,85 +1065,57 @@ public class Struct {
             value <<= shift;
             return (word & ~mask) | (value & mask);
         }
+
+        /**
+         * Returns the outer {@link Struct struct} container.
+         *
+         * @return the outer struct.
+         */
+        public final Struct struct() {
+            return Struct.this;
+        }
     }
 
-    protected final class Member extends AbstractMember{
+    /**
+     * This class represents an arbitrary size (unsigned) bit field with
+     * no word size constraint (they can straddle words boundaries).
+     */
+    public final class BitField extends AbstractMember {
 
-        Member(int bitLength, int wordSize) {
-            super(bitLength, wordSize);
+        public BitField(int nbrOfBits) {
+            super(nbrOfBits, 0);
+        }
+
+        public byte byteValue() {
+            return (byte) longValue();
+        }
+
+        public int intValue() {
+            return (int) longValue();
+        }
+
+        public long longValue() {
+            long signedValue = readBits(bitIndex() + (offset() << 3),
+                    bitLength());
+            return ~(-1L << bitLength()) & signedValue;
+        }
+
+        public void set(long value) {
+            writeBits(value, bitIndex() + (offset() << 3), bitLength());
+        }
+
+        public short shortValue() {
+            return (short) longValue();
+        }
+
+        public String toString() {
+            return String.valueOf(longValue());
         }
     }
 
     ///////////////////////
     // PREDEFINED FIELDS //
     ///////////////////////
-    /**
-     * This class represents a UTF-8 character string, null terminated
-     * (for C/C++ compatibility)
-     */
-    public final class UTF8String extends AbstractMember {
-
-        private final UTF8ByteBufferWriter _writer = new UTF8ByteBufferWriter();
-        private final UTF8ByteBufferReader _reader = new UTF8ByteBufferReader();
-        private final int _length;
-
-        public UTF8String(int length) {
-            super(length << 3, 1);
-            _length = length; // Takes into account 0 terminator.
-        }
-
-        public void set(String string) {
-            final ByteBuffer buffer = getByteBuffer();
-            synchronized (buffer) {
-                try {
-                    int index = getByteBufferPosition() + offset();
-                    buffer.position(index);
-                    _writer.setOutput(buffer);
-                    if (string.length() < _length) {
-                        _writer.write(string);
-                        _writer.write(0); // Marks end of string.
-                    } else if (string.length() > _length) { // Truncates.
-                        _writer.write(string.substring(0, _length));
-                    } else { // Exact same length.
-                        _writer.write(string);
-                    }
-                } catch (IOException e) { // Should never happen.
-                    throw new Error(e.getMessage());
-                } finally {
-                    _writer.reset();
-                }
-            }
-        }
-
-        public String get() {
-            final ByteBuffer buffer = getByteBuffer();
-            synchronized (buffer) {
-                TextBuilder tmp = new TextBuilder();
-                try {
-                    int index = getByteBufferPosition() + offset();
-                    buffer.position(index);
-                    _reader.setInput(buffer);
-                    for (int i = 0; i < _length; i++) {
-                        char c = (char) _reader.read();
-                        if (c == 0) { // Null terminator.
-                            return tmp.toString();
-                        } else {
-                            tmp.append(c);
-                        }
-                    }
-                    return tmp.toString();
-                } catch (IOException e) { // Should never happen.
-                    throw new Error(e.getMessage());
-                } finally {
-                    _reader.reset();
-                }
-            }
-        }
-
-        public String toString() {
-            return this.get();
-        }
-    }
 
     /**
      * This class represents a 8 bits boolean with <code>true</code> represented
@@ -1185,462 +1148,6 @@ public class Struct {
                         (byte) set(value ? -1 : 0, 1, getByteBuffer()
                                 .get(index)));
             }
-        }
-
-        public String toString() {
-            return String.valueOf(this.get());
-        }
-    }
-
-    /**
-     * This class represents a 8 bits signed integer.
-     */
-    public final class Signed8 extends AbstractMember {
-
-        public Signed8() {
-            super(8, 1);
-        }
-
-        public Signed8(int nbrOfBits) {
-            super(nbrOfBits, 1);
-        }
-
-        public byte get() {
-            final int index = getByteBufferPosition() + offset();
-            int word = getByteBuffer().get(index);
-            return (byte) ((bitLength() == 8) ? word : get(1, word));
-        }
-
-        public void set(byte value) {
-            final int index = getByteBufferPosition() + offset();
-            if (bitLength() == 8) {
-                getByteBuffer().put(index, value);
-            } else {
-                getByteBuffer().put(index,
-                        (byte) set(value, 1, getByteBuffer().get(index)));
-            }
-        }
-
-        public String toString() {
-            return String.valueOf(this.get());
-        }
-    }
-
-    /**
-     * This class represents a 8 bits unsigned integer.
-     */
-    public final class Unsigned8 extends AbstractMember {
-
-        public Unsigned8() {
-            super(8, 1);
-        }
-
-        public Unsigned8(int nbrOfBits) {
-            super(nbrOfBits, 1);
-        }
-
-        public short get() {
-            final int index = getByteBufferPosition() + offset();
-            int word = getByteBuffer().get(index);
-            return (short) (0xFF & ((bitLength() == 8) ? word : get(1, word)));
-        }
-
-        public void set(short value) {
-            final int index = getByteBufferPosition() + offset();
-            if (bitLength() == 8) {
-                getByteBuffer().put(index, (byte) value);
-            } else {
-                getByteBuffer().put(index,
-                        (byte) set(value, 1, getByteBuffer().get(index)));
-            }
-        }
-
-        public String toString() {
-            return String.valueOf(this.get());
-        }
-    }
-
-    /**
-     * This class represents a 16 bits signed integer.
-     */
-    public final class Signed16 extends AbstractMember {
-
-        public Signed16() {
-            super(16, 2);
-        }
-
-        public Signed16(int nbrOfBits) {
-            super(nbrOfBits, 2);
-        }
-
-        public short get() {
-            final int index = getByteBufferPosition() + offset();
-            int word = getByteBuffer().getShort(index);
-            return (short) ((bitLength() == 16) ? word : get(2, word));
-        }
-
-        public void set(short value) {
-            final int index = getByteBufferPosition() + offset();
-            if (bitLength() == 16) {
-                getByteBuffer().putShort(index, value);
-            } else {
-                getByteBuffer().putShort(index,
-                        (short) set(value, 2, getByteBuffer().getShort(index)));
-            }
-        }
-
-        public String toString() {
-            return String.valueOf(this.get());
-        }
-    }
-
-    /**
-     * This class represents a 16 bits unsigned integer.
-     */
-    public final class Unsigned16 extends AbstractMember {
-
-        public Unsigned16() {
-            super(16, 2);
-        }
-
-        public Unsigned16(int nbrOfBits) {
-            super(nbrOfBits, 2);
-        }
-
-        public int get() {
-            final int index = getByteBufferPosition() + offset();
-            int word = getByteBuffer().getShort(index);
-            return 0xFFFF & ((bitLength() == 16) ? word : get(2, word));
-        }
-
-        public void set(int value) {
-            final int index = getByteBufferPosition() + offset();
-            if (bitLength() == 16) {
-                getByteBuffer().putShort(index, (short) value);
-            } else {
-                getByteBuffer().putShort(index,
-                        (short) set(value, 2, getByteBuffer().getShort(index)));
-            }
-        }
-
-        public String toString() {
-            return String.valueOf(this.get());
-        }
-    }
-
-    /**
-     * This class represents a 32 bits signed integer.
-     */
-    public final class Signed32 extends AbstractMember {
-
-        public Signed32() {
-            super(32, 4);
-        }
-
-        public Signed32(int nbrOfBits) {
-            super(nbrOfBits, 4);
-        }
-
-        public int get() {
-            final int index = getByteBufferPosition() + offset();
-            int word = getByteBuffer().getInt(index);
-            return (bitLength() == 32) ? word : get(4, word);
-        }
-
-        public void set(int value) {
-            final int index = getByteBufferPosition() + offset();
-            if (bitLength() == 32) {
-                getByteBuffer().putInt(index, value);
-            } else {
-                getByteBuffer().putInt(index,
-                        set(value, 4, getByteBuffer().getInt(index)));
-            }
-        }
-
-        public String toString() {
-            return String.valueOf(this.get());
-        }
-    }
-
-    /**
-     * This class represents a 32 bits unsigned integer.
-     */
-    public final class Unsigned32 extends AbstractMember {
-
-        public Unsigned32() {
-            super(32, 4);
-        }
-
-        public Unsigned32(int nbrOfBits) {
-            super(nbrOfBits, 4);
-        }
-
-        public long get() {
-            final int index = getByteBufferPosition() + offset();
-            int word = getByteBuffer().getInt(index);
-            return 0xFFFFFFFFL & ((bitLength() == 32) ? word : get(4, word));
-        }
-
-        public void set(long value) {
-            final int index = getByteBufferPosition() + offset();
-            if (bitLength() == 32) {
-                getByteBuffer().putInt(index, (int) value);
-            } else {
-                getByteBuffer().putInt(index,
-                        set((int) value, 4, getByteBuffer().getInt(index)));
-            }
-        }
-
-        public String toString() {
-            return String.valueOf(this.get());
-        }
-    }
-
-    /**
-     * This class represents a 64 bits signed integer.
-     */
-    public class Signed64 extends AbstractMember {
-
-        public Signed64() {
-            super(64, 8);
-        }
-
-        public Signed64(int nbrOfBits) {
-            super(nbrOfBits, 8);
-        }
-
-        public long get() {
-            final int index = getByteBufferPosition() + offset();
-            long word = getByteBuffer().getLong(index);
-            return (bitLength() == 64) ? word : get(8, word);
-        }
-
-        public void set(long value) {
-            final int index = getByteBufferPosition() + offset();
-            if (bitLength() == 64) {
-                getByteBuffer().putLong(index, value);
-            } else {
-                getByteBuffer().putLong(index,
-                        set(value, 8, getByteBuffer().getLong(index)));
-            }
-        }
-
-        public String toString() {
-            return String.valueOf(this.get());
-        }
-    }
-
-    /**
-     * This class represents an arbitrary size (unsigned) bit field with
-     * no word size constraint (they can straddle words boundaries).
-     */
-    public final class BitField extends AbstractMember {
-
-        public BitField(int nbrOfBits) {
-            super(nbrOfBits, 0);
-        }
-
-        public long longValue() {
-            long signedValue = readBits(bitIndex() + (offset() << 3),
-                    bitLength());
-            return ~(-1L << bitLength()) & signedValue;
-        }
-
-        public int intValue() {
-            return (int) longValue();
-        }
-
-        public short shortValue() {
-            return (short) longValue();
-        }
-
-        public byte byteValue() {
-            return (byte) longValue();
-        }
-
-        public void set(long value) {
-            writeBits(value, bitIndex() + (offset() << 3), bitLength());
-        }
-
-        public String toString() {
-            return String.valueOf(longValue());
-        }
-    }
-
-    /**
-     * This class represents a 32 bits float (C/C++/Java <code>float</code>).
-     */
-    public final class Float32 extends AbstractMember {
-
-        public Float32() {
-            super(32, 4);
-        }
-
-        public float get() {
-            final int index = getByteBufferPosition() + offset();
-            return getByteBuffer().getFloat(index);
-        }
-
-        public void set(float value) {
-            final int index = getByteBufferPosition() + offset();
-            getByteBuffer().putFloat(index, value);
-        }
-
-        public String toString() {
-            return String.valueOf(this.get());
-        }
-    }
-
-    /**
-     * This class represents a 64 bits float (C/C++/Java <code>double</code>).
-     */
-    public final class Float64 extends AbstractMember {
-
-        public Float64() {
-            super(64, 8);
-        }
-
-        public double get() {
-            final int index = getByteBufferPosition() + offset();
-            return getByteBuffer().getDouble(index);
-        }
-
-        public void set(double value) {
-            final int index = getByteBufferPosition() + offset();
-            getByteBuffer().putDouble(index, value);
-        }
-
-        public String toString() {
-            return String.valueOf(this.get());
-        }
-    }
-
-    /**
-     * <p> This class represents a 32 bits reference (C/C++ pointer) to
-     *     a {@link Struct} object (other types may require a {@link Struct}
-     *     wrapper).</p>
-     * <p> Note: For references which can be externally modified, an application
-     *           may want to check the {@link #isUpToDate up-to-date} status of
-     *           the reference. For out-of-date references, a {@link Struct}
-     *           can be created at the address specified by {@link #value}
-     *           (using JNI) and the reference {@link #set set} accordingly.</p>
-     */
-    public final class Reference32<S extends Struct> extends AbstractMember {
-
-        private S _struct;
-
-        public Reference32() {
-            super(32, 4);
-        }
-
-        public void set(S struct) {
-            final int index = getByteBufferPosition() + offset();
-            if (struct != null) {
-                getByteBuffer().putInt(index, (int) struct.address());
-            } else {
-                getByteBuffer().putInt(index, 0);
-            }
-            _struct = struct;
-        }
-
-        public S get() {
-            return _struct;
-        }
-
-        public int value() {
-            final int index = getByteBufferPosition() + offset();
-            return getByteBuffer().getInt(index);
-        }
-
-        public boolean isUpToDate() {
-            final int index = getByteBufferPosition() + offset();
-            if (_struct != null) {
-                return getByteBuffer().getInt(index) == (int) _struct.address();
-            } else {
-                return getByteBuffer().getInt(index) == 0;
-            }
-        }
-    }
-
-    /**
-     * <p> This class represents a 64 bits reference (C/C++ pointer) to
-     *     a {@link Struct} object (other types may require a {@link Struct}
-     *     wrapper).</p>
-     * <p> Note: For references which can be externally modified, an application
-     *           may want to check the {@link #isUpToDate up-to-date} status of
-     *           the reference. For out-of-date references, a new {@link Struct}
-     *           can be created at the address specified by {@link #value}
-     *           (using JNI) and then {@link #set set} to the reference.</p>
-     */
-    public final class Reference64<S extends Struct> extends AbstractMember {
-
-        private S _struct;
-
-        public Reference64() {
-            super(64, 8);
-        }
-
-        public void set(S struct) {
-            final int index = getByteBufferPosition() + offset();
-            if (struct != null) {
-                getByteBuffer().putLong(index, struct.address());
-            } else if (struct == null) {
-                getByteBuffer().putLong(index, 0L);
-            }
-            _struct = struct;
-        }
-
-        public S get() {
-            return _struct;
-        }
-
-        public long value() {
-            final int index = getByteBufferPosition() + offset();
-            return getByteBuffer().getLong(index);
-        }
-
-        public boolean isUpToDate() {
-            final int index = getByteBufferPosition() + offset();
-            if (_struct != null) {
-                return getByteBuffer().getLong(index) == _struct.address();
-            } else {
-                return getByteBuffer().getLong(index) == 0L;
-            }
-        }
-    }
-
-    /**
-     * This class represents a 8 bits {@link Enum}.
-     */
-    public final class Enum8<T extends Enum<T>> extends AbstractMember {
-
-        private final T[] _values;
-
-        public Enum8(T[] values) {
-            super(8, 1);
-            _values = values;
-        }
-
-        public Enum8(T[] values, int nbrOfBits) {
-            super(nbrOfBits, 1);
-            _values = values;
-        }
-
-        public T get() {
-            final int index = getByteBufferPosition() + offset();
-            int word = getByteBuffer().get(index);
-            return _values[0xFF & get(1, word)];
-        }
-
-        public void set(T e) {
-            int value = e.ordinal();
-            if (_values[value] != e) throw new IllegalArgumentException(
-                    "enum: "
-                            + e
-                            + ", ordinal value does not reflect enum values position");
-            final int index = getByteBufferPosition() + offset();
-            int word = getByteBuffer().get(index);
-            getByteBuffer().put(index, (byte) set(value, 1, word));
         }
 
         public String toString() {
@@ -1758,6 +1265,568 @@ public class Struct {
             final int index = getByteBufferPosition() + offset();
             long word = getByteBuffer().getLong(index);
             getByteBuffer().putLong(index, set(value, 8, word));
+        }
+
+        public String toString() {
+            return String.valueOf(this.get());
+        }
+    }
+
+    /**
+     * This class represents a 8 bits {@link Enum}.
+     */
+    public final class Enum8<T extends Enum<T>> extends AbstractMember {
+
+        private final T[] _values;
+
+        public Enum8(T[] values) {
+            super(8, 1);
+            _values = values;
+        }
+
+        public Enum8(T[] values, int nbrOfBits) {
+            super(nbrOfBits, 1);
+            _values = values;
+        }
+
+        public T get() {
+            final int index = getByteBufferPosition() + offset();
+            int word = getByteBuffer().get(index);
+            return _values[0xFF & get(1, word)];
+        }
+
+        public void set(T e) {
+            int value = e.ordinal();
+            if (_values[value] != e) throw new IllegalArgumentException(
+                    "enum: "
+                            + e
+                            + ", ordinal value does not reflect enum values position");
+            final int index = getByteBufferPosition() + offset();
+            int word = getByteBuffer().get(index);
+            getByteBuffer().put(index, (byte) set(value, 1, word));
+        }
+
+        public String toString() {
+            return String.valueOf(this.get());
+        }
+    }
+
+    /**
+     * This class represents a 32 bits float (C/C++/Java <code>float</code>).
+     */
+    public final class Float32 extends AbstractMember {
+
+        public Float32() {
+            super(32, 4);
+        }
+
+        public float get() {
+            final int index = getByteBufferPosition() + offset();
+            return getByteBuffer().getFloat(index);
+        }
+
+        public void set(float value) {
+            final int index = getByteBufferPosition() + offset();
+            getByteBuffer().putFloat(index, value);
+        }
+
+        public String toString() {
+            return String.valueOf(this.get());
+        }
+    }
+
+    /**
+     * This class represents a 64 bits float (C/C++/Java <code>double</code>).
+     */
+    public final class Float64 extends AbstractMember {
+
+        public Float64() {
+            super(64, 8);
+        }
+
+        public double get() {
+            final int index = getByteBufferPosition() + offset();
+            return getByteBuffer().getDouble(index);
+        }
+
+        public void set(double value) {
+            final int index = getByteBufferPosition() + offset();
+            getByteBuffer().putDouble(index, value);
+        }
+
+        public String toString() {
+            return String.valueOf(this.get());
+        }
+    }
+
+    protected final class Member extends AbstractMember{
+
+        Member(int bitLength, int wordSize) {
+            super(bitLength, wordSize);
+        }
+    }
+
+    /**
+     * <p> This class represents a 32 bits reference (C/C++ pointer) to
+     *     a {@link Struct} object (other types may require a {@link Struct}
+     *     wrapper).</p>
+     * <p> Note: For references which can be externally modified, an application
+     *           may want to check the {@link #isUpToDate up-to-date} status of
+     *           the reference. For out-of-date references, a {@link Struct}
+     *           can be created at the address specified by {@link #value}
+     *           (using JNI) and the reference {@link #set set} accordingly.</p>
+     */
+    public final class Reference32<S extends Struct> extends AbstractMember {
+
+        private S _struct;
+
+        public Reference32() {
+            super(32, 4);
+        }
+
+        public S get() {
+            return _struct;
+        }
+
+        public boolean isUpToDate() {
+            final int index = getByteBufferPosition() + offset();
+            if (_struct != null) {
+                return getByteBuffer().getInt(index) == (int) _struct.address();
+            } else {
+                return getByteBuffer().getInt(index) == 0;
+            }
+        }
+
+        public void set(S struct) {
+            final int index = getByteBufferPosition() + offset();
+            if (struct != null) {
+                getByteBuffer().putInt(index, (int) struct.address());
+            } else {
+                getByteBuffer().putInt(index, 0);
+            }
+            _struct = struct;
+        }
+
+        public int value() {
+            final int index = getByteBufferPosition() + offset();
+            return getByteBuffer().getInt(index);
+        }
+    }
+
+    /**
+     * <p> This class represents a 64 bits reference (C/C++ pointer) to
+     *     a {@link Struct} object (other types may require a {@link Struct}
+     *     wrapper).</p>
+     * <p> Note: For references which can be externally modified, an application
+     *           may want to check the {@link #isUpToDate up-to-date} status of
+     *           the reference. For out-of-date references, a new {@link Struct}
+     *           can be created at the address specified by {@link #value}
+     *           (using JNI) and then {@link #set set} to the reference.</p>
+     */
+    public final class Reference64<S extends Struct> extends AbstractMember {
+
+        private S _struct;
+
+        public Reference64() {
+            super(64, 8);
+        }
+
+        public S get() {
+            return _struct;
+        }
+
+        public boolean isUpToDate() {
+            final int index = getByteBufferPosition() + offset();
+            if (_struct != null) {
+                return getByteBuffer().getLong(index) == _struct.address();
+            } else {
+                return getByteBuffer().getLong(index) == 0L;
+            }
+        }
+
+        public void set(S struct) {
+            final int index = getByteBufferPosition() + offset();
+            if (struct != null) {
+                getByteBuffer().putLong(index, struct.address());
+            } else if (struct == null) {
+                getByteBuffer().putLong(index, 0L);
+            }
+            _struct = struct;
+        }
+
+        public long value() {
+            final int index = getByteBufferPosition() + offset();
+            return getByteBuffer().getLong(index);
+        }
+    }
+
+    /**
+     * This class represents a 16 bits signed integer.
+     */
+    public final class Signed16 extends AbstractMember {
+
+        public Signed16() {
+            super(16, 2);
+        }
+
+        public Signed16(int nbrOfBits) {
+            super(nbrOfBits, 2);
+        }
+
+        public short get() {
+            final int index = getByteBufferPosition() + offset();
+            int word = getByteBuffer().getShort(index);
+            return (short) ((bitLength() == 16) ? word : get(2, word));
+        }
+
+        public void set(short value) {
+            final int index = getByteBufferPosition() + offset();
+            if (bitLength() == 16) {
+                getByteBuffer().putShort(index, value);
+            } else {
+                getByteBuffer().putShort(index,
+                        (short) set(value, 2, getByteBuffer().getShort(index)));
+            }
+        }
+
+        public String toString() {
+            return String.valueOf(this.get());
+        }
+    }
+
+    /**
+     * This class represents a 32 bits signed integer.
+     */
+    public final class Signed32 extends AbstractMember {
+
+        public Signed32() {
+            super(32, 4);
+        }
+
+        public Signed32(int nbrOfBits) {
+            super(nbrOfBits, 4);
+        }
+
+        public int get() {
+            final int index = getByteBufferPosition() + offset();
+            int word = getByteBuffer().getInt(index);
+            return (bitLength() == 32) ? word : get(4, word);
+        }
+
+        public void set(int value) {
+            final int index = getByteBufferPosition() + offset();
+            if (bitLength() == 32) {
+                getByteBuffer().putInt(index, value);
+            } else {
+                getByteBuffer().putInt(index,
+                        set(value, 4, getByteBuffer().getInt(index)));
+            }
+        }
+
+        public String toString() {
+            return String.valueOf(this.get());
+        }
+    }
+
+    /**
+     * This class represents a 64 bits signed integer.
+     */
+    public class Signed64 extends AbstractMember {
+
+        public Signed64() {
+            super(64, 8);
+        }
+
+        public Signed64(int nbrOfBits) {
+            super(nbrOfBits, 8);
+        }
+
+        public long get() {
+            final int index = getByteBufferPosition() + offset();
+            long word = getByteBuffer().getLong(index);
+            return (bitLength() == 64) ? word : get(8, word);
+        }
+
+        public void set(long value) {
+            final int index = getByteBufferPosition() + offset();
+            if (bitLength() == 64) {
+                getByteBuffer().putLong(index, value);
+            } else {
+                getByteBuffer().putLong(index,
+                        set(value, 8, getByteBuffer().getLong(index)));
+            }
+        }
+
+        public String toString() {
+            return String.valueOf(this.get());
+        }
+    }
+
+    /**
+     * This class represents a 8 bits signed integer.
+     */
+    public final class Signed8 extends AbstractMember {
+
+        public Signed8() {
+            super(8, 1);
+        }
+
+        public Signed8(int nbrOfBits) {
+            super(nbrOfBits, 1);
+        }
+
+        public byte get() {
+            final int index = getByteBufferPosition() + offset();
+            int word = getByteBuffer().get(index);
+            return (byte) ((bitLength() == 8) ? word : get(1, word));
+        }
+
+        public void set(byte value) {
+            final int index = getByteBufferPosition() + offset();
+            if (bitLength() == 8) {
+                getByteBuffer().put(index, value);
+            } else {
+                getByteBuffer().put(index,
+                        (byte) set(value, 1, getByteBuffer().get(index)));
+            }
+        }
+
+        public String toString() {
+            return String.valueOf(this.get());
+        }
+    }
+
+    /**
+     * This class represents a UTF-8 character string, null terminated
+     * (for C/C++ compatibility)
+     */
+    public final class UTF8String extends AbstractMember {
+
+        private final int _length;
+        private final UTF8ByteBufferReader _reader = new UTF8ByteBufferReader();
+        private final UTF8ByteBufferWriter _writer = new UTF8ByteBufferWriter();
+
+        public UTF8String(int length) {
+            super(length << 3, 1);
+            _length = length; // Takes into account 0 terminator.
+        }
+
+        public String get() {
+            final ByteBuffer buffer = getByteBuffer();
+            synchronized (buffer) {
+                TextBuilder tmp = new TextBuilder();
+                try {
+                    int index = getByteBufferPosition() + offset();
+                    buffer.position(index);
+                    _reader.setInput(buffer);
+                    for (int i = 0; i < _length; i++) {
+                        char c = (char) _reader.read();
+                        if (c == 0) { // Null terminator.
+                            return tmp.toString();
+                        } else {
+                            tmp.append(c);
+                        }
+                    }
+                    return tmp.toString();
+                } catch (IOException e) { // Should never happen.
+                    throw new Error(e.getMessage());
+                } finally {
+                    _reader.reset();
+                }
+            }
+        }
+
+        public void set(String string) {
+            final ByteBuffer buffer = getByteBuffer();
+            synchronized (buffer) {
+                try {
+                    int index = getByteBufferPosition() + offset();
+                    buffer.position(index);
+                    _writer.setOutput(buffer);
+                    if (string.length() < _length) {
+                        _writer.write(string);
+                        _writer.write(0); // Marks end of string.
+                    } else if (string.length() > _length) { // Truncates.
+                        _writer.write(string.substring(0, _length));
+                    } else { // Exact same length.
+                        _writer.write(string);
+                    }
+                } catch (IOException e) { // Should never happen.
+                    throw new Error(e.getMessage());
+                } finally {
+                    _writer.reset();
+                }
+            }
+        }
+
+        public String toString() {
+            return this.get();
+        }
+    }
+
+    /**
+     * This class represents a 16 bits signed integer.
+     */
+    public final class UTFChar16 extends AbstractMember {
+
+        public UTFChar16() {
+            super(16, 2);
+        }
+
+        public UTFChar16(int nbrOfBits) {
+            super(nbrOfBits, 2);
+        }
+
+        public char get() {
+            final int index = getByteBufferPosition() + offset();
+            char word = getByteBuffer().getChar(index);
+            return (char) ((bitLength() == 16) ? word : get(2, word));
+        }
+
+        public void set(char value) {
+            final int index = getByteBufferPosition() + offset();
+            if (bitLength() == 16) {
+                getByteBuffer().putChar(index, value);
+            } else {
+                getByteBuffer().putChar(index,
+                        (char) set(value, 2, getByteBuffer().getChar(index)));
+            }
+        }
+
+        public String toString() {
+            return String.valueOf(this.get());
+        }
+    }
+
+    /**
+     * This class represents a 8 bits unsigned integer.
+     */
+    public final class UTFChar8 extends AbstractMember {
+
+        public UTFChar8() {
+            super(8, 1);
+        }
+
+        public UTFChar8(int nbrOfBits) {
+            super(nbrOfBits, 1);
+        }
+
+        public char get() {
+            final int index = getByteBufferPosition() + offset();
+            int word = getByteBuffer().get(index);
+            return (char) (0xFF & ((bitLength() == 8) ? word : get(1, word)));
+        }
+
+        public void set(char value) {
+            final int index = getByteBufferPosition() + offset();
+            if (bitLength() == 8) {
+                getByteBuffer().put(index, (byte) value);
+            } else {
+                getByteBuffer().put(index,
+                        (byte) set(value, 1, getByteBuffer().get(index)));
+            }
+        }
+
+        public String toString() {
+            return String.valueOf(this.get());
+        }
+    }
+
+    /**
+     * This class represents a 16 bits unsigned integer.
+     */
+    public final class Unsigned16 extends AbstractMember {
+
+        public Unsigned16() {
+            super(16, 2);
+        }
+
+        public Unsigned16(int nbrOfBits) {
+            super(nbrOfBits, 2);
+        }
+
+        public int get() {
+            final int index = getByteBufferPosition() + offset();
+            int word = getByteBuffer().getShort(index);
+            return 0xFFFF & ((bitLength() == 16) ? word : get(2, word));
+        }
+
+        public void set(int value) {
+            final int index = getByteBufferPosition() + offset();
+            if (bitLength() == 16) {
+                getByteBuffer().putShort(index, (short) value);
+            } else {
+                getByteBuffer().putShort(index,
+                        (short) set(value, 2, getByteBuffer().getShort(index)));
+            }
+        }
+
+        public String toString() {
+            return String.valueOf(this.get());
+        }
+    }
+
+    /**
+     * This class represents a 32 bits unsigned integer.
+     */
+    public final class Unsigned32 extends AbstractMember {
+
+        public Unsigned32() {
+            super(32, 4);
+        }
+
+        public Unsigned32(int nbrOfBits) {
+            super(nbrOfBits, 4);
+        }
+
+        public long get() {
+            final int index = getByteBufferPosition() + offset();
+            int word = getByteBuffer().getInt(index);
+            return 0xFFFFFFFFL & ((bitLength() == 32) ? word : get(4, word));
+        }
+
+        public void set(long value) {
+            final int index = getByteBufferPosition() + offset();
+            if (bitLength() == 32) {
+                getByteBuffer().putInt(index, (int) value);
+            } else {
+                getByteBuffer().putInt(index,
+                        set((int) value, 4, getByteBuffer().getInt(index)));
+            }
+        }
+
+        public String toString() {
+            return String.valueOf(this.get());
+        }
+    }
+
+    /**
+     * This class represents a 8 bits unsigned integer.
+     */
+    public final class Unsigned8 extends AbstractMember {
+
+        public Unsigned8() {
+            super(8, 1);
+        }
+
+        public Unsigned8(int nbrOfBits) {
+            super(nbrOfBits, 1);
+        }
+
+        public short get() {
+            final int index = getByteBufferPosition() + offset();
+            int word = getByteBuffer().get(index);
+            return (short) (0xFF & ((bitLength() == 8) ? word : get(1, word)));
+        }
+
+        public void set(short value) {
+            final int index = getByteBufferPosition() + offset();
+            if (bitLength() == 8) {
+                getByteBuffer().put(index, (byte) value);
+            } else {
+                getByteBuffer().put(index,
+                        (byte) set(value, 1, getByteBuffer().get(index)));
+            }
         }
 
         public String toString() {

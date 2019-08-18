@@ -13,9 +13,8 @@ public class TestDirectMemoryLayout {
 
     private static final int capacity = NUM_RECORDS * DirectMemoryTrade.objectSize;
 
-    private static final ByteBuffer byteBuffer = ByteBuffer.allocateDirect(capacity);
+    private static final ByteBuffer globalByteBuffer = ByteBuffer.allocateDirect(capacity);
 
-    private static int address;
     private static final DirectMemoryTrade flyweight = new DirectMemoryTrade();
 
     public static void main(final String[] args) {
@@ -23,6 +22,8 @@ public class TestDirectMemoryLayout {
         System.out.println(" --- TestDirectMemoryLayout --- ");
         System.out.println("over all size: " + capacity);
         System.out.println("struct size:   " + DirectMemoryTrade.objectSize);
+
+        flyweight.setByteBuffer(globalByteBuffer, 0);
 
         for (int i = 0; i < 5; i++) {
             System.gc();
@@ -44,7 +45,7 @@ public class TestDirectMemoryLayout {
 
         long start2 = System.nanoTime();
         for (int i = 0; i < NUM_RECORDS; i++) {
-            final DirectMemoryTrade trade = get(i);
+            final DirectMemoryTrade trade = flyweight.get(i);
 
             value1 += trade.getTradeId();
             value1 += trade.getClientId();
@@ -60,15 +61,7 @@ public class TestDirectMemoryLayout {
         destroy();
     }
 
-    private static DirectMemoryTrade get(final int index) {
-        final int offset = address + (index * DirectMemoryTrade.getObjectSize());
-        flyweight.setObjectOffset(offset);
-        return flyweight;
-    }
-
     public static void init() {
-        final int requiredHeap = NUM_RECORDS * DirectMemoryTrade.getObjectSize();
-        address = 0; //byteBuffer.allocateMemory(requiredHeap);
 
         final byte[] londonStockExchange = {'X', 'L', 'O', 'N'};
         final int venueCode = pack(londonStockExchange);
@@ -77,7 +70,7 @@ public class TestDirectMemoryLayout {
         final int instrumentCode = pack(billiton);
 
         for (int i = 0; i < NUM_RECORDS; i++) {
-            DirectMemoryTrade trade = get(i);
+            DirectMemoryTrade trade = flyweight.get(i);
 
             trade.setTradeId(i);
             trade.setClientId(1);
@@ -116,6 +109,9 @@ public class TestDirectMemoryLayout {
     }
 
     private static class DirectMemoryTrade {
+
+        private ByteBuffer byteBuffer;
+
         private static int offset = 0;
 
         private static final int tradeIdOffset = offset += 0;
@@ -128,70 +124,91 @@ public class TestDirectMemoryLayout {
 
         static final int objectSize = offset += 2;
 
-        private int objectOffset;
+        private int tradeIdIdx;
+        private int clientIdIdx;
+        private int venueCodeIdx;
+        private int instrumentCodeIdx;
+        private int priceIdx;
+        private int quantityIdx;
+        private int sideIdx;
 
-        public static int getObjectSize() {
+        public DirectMemoryTrade get(final int index) {
+            final int offset = (index * getObjectSize());
+            final int objectOffset = offset;
+
+            this.tradeIdIdx = objectOffset + tradeIdOffset;
+            this.clientIdIdx = objectOffset + clientIdOffset;
+            this.venueCodeIdx = objectOffset + venueCodeOffset;
+            this.instrumentCodeIdx = objectOffset + instrumentCodeOffset;
+            this.priceIdx = objectOffset + priceOffset;
+            this.quantityIdx = objectOffset + quantityOffset;
+            this.sideIdx = objectOffset + sideOffset;
+
+            return this;
+        }
+
+        public final void setByteBuffer(ByteBuffer byteBuffer, int position) {
+            this.byteBuffer = byteBuffer;
+        }
+
+        public int getObjectSize() {
             return objectSize;
         }
 
-        void setObjectOffset(final int objectOffset) {
-            this.objectOffset = objectOffset;
-        }
-
         public long getTradeId() {
-            return byteBuffer.getLong(objectOffset + tradeIdOffset);
+            return byteBuffer.getLong(tradeIdIdx);
         }
 
         public void setTradeId(final long tradeId) {
-            byteBuffer.putLong(objectOffset + tradeIdOffset, tradeId);
+            byteBuffer.putLong(tradeIdIdx, tradeId);
         }
 
         public long getClientId() {
-            return byteBuffer.getLong(objectOffset + clientIdOffset);
+            return byteBuffer.getLong(clientIdIdx);
         }
 
         public void setClientId(final long clientId) {
-            byteBuffer.putLong(objectOffset + clientIdOffset, clientId);
+            byteBuffer.putLong(clientIdIdx, clientId);
         }
 
         public int getVenueCode() {
-            return byteBuffer.getInt(objectOffset + venueCodeOffset);
+            return byteBuffer.getInt(venueCodeIdx);
         }
 
         public void setVenueCode(final int venueCode) {
-            byteBuffer.putInt(objectOffset + venueCodeOffset, venueCode);
+            byteBuffer.putInt(venueCodeIdx, venueCode);
         }
 
         public int getInstrumentCode() {
-            return byteBuffer.getInt(objectOffset + instrumentCodeOffset);
+            return byteBuffer.getInt(instrumentCodeIdx);
         }
 
         public void setInstrumentCode(final int instrumentCode) {
-            byteBuffer.putInt(objectOffset + instrumentCodeOffset, instrumentCode);
+            byteBuffer.putInt(instrumentCodeIdx, instrumentCode);
         }
 
         public long getPrice() {
-            return byteBuffer.getLong(objectOffset + priceOffset);
+            return byteBuffer.getLong(priceIdx);
         }
 
         public void setPrice(final long price) {
-            byteBuffer.putLong(objectOffset + priceOffset, price);
+            byteBuffer.putLong(priceIdx, price);
         }
 
         public long getQuantity() {
-            return byteBuffer.getLong(objectOffset + quantityOffset);
+            return byteBuffer.getLong(quantityIdx);
         }
 
         public void setQuantity(final long quantity) {
-            byteBuffer.putLong(objectOffset + quantityOffset, quantity);
+            byteBuffer.putLong(quantityIdx, quantity);
         }
 
         public char getSide() {
-            return byteBuffer.getChar(objectOffset + sideOffset);
+            return byteBuffer.getChar(sideIdx);
         }
 
         public void setSide(final char side) {
-            byteBuffer.putChar(objectOffset + sideOffset, side);
+            byteBuffer.putChar(sideIdx, side);
         }
     }
 }

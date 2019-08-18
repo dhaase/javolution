@@ -8,20 +8,20 @@ public class TestStructMemoryLayout {
 
     private static final int NUM_RECORDS = 50 * 1000 * 1000;
 
-    private static final StructMemoryTrade structMemoryTrade = new StructMemoryTrade();
+    private static final StructMemoryTrade flyweight = new StructMemoryTrade();
 
-    private static final int capacity = NUM_RECORDS * structMemoryTrade.size();
+    private static final int capacity = NUM_RECORDS * flyweight.size();
 
-    private static final ByteBuffer byteBuffer = ByteBuffer.allocateDirect(capacity);
+    private static final ByteBuffer globalByteBuffer = ByteBuffer.allocateDirect(capacity);
 
 
     public static void main(final String[] args) {
 
         System.out.println(" --- TestStructMemoryLayout --- ");
         System.out.println("over all size: " + capacity);
-        System.out.println("struct size:   " + structMemoryTrade.size());
+        System.out.println("struct size:   " + flyweight.size());
 
-        structMemoryTrade.setByteBuffer(byteBuffer, 0);
+        flyweight.setByteBuffer(globalByteBuffer, 0);
 
         for (int i = 0; i < 5; i++) {
             System.gc();
@@ -43,7 +43,7 @@ public class TestStructMemoryLayout {
 
         long start2 = System.nanoTime();
         for (int i = 0; i < NUM_RECORDS; i++) {
-            final StructMemoryTrade trade = get(i);
+            final StructMemoryTrade trade = flyweight.get(i);
 
             value1 += trade.getTradeId();
             value1 += trade.getClientId();
@@ -57,10 +57,6 @@ public class TestStructMemoryLayout {
         System.out.println(runNum + " - write duration " + duration1 + "ms; read duration " + duration2 + "ms (" + value1 + ")");
     }
 
-    private static StructMemoryTrade get(final int index) {
-        return (StructMemoryTrade) structMemoryTrade.setByteBufferPosition(index * structMemoryTrade.size());
-    }
-
     public static void init() {
 
         final byte[] londonStockExchange = {'X', 'L', 'O', 'N'};
@@ -70,7 +66,7 @@ public class TestStructMemoryLayout {
         final int instrumentCode = pack(billiton);
 
         for (int i = 0; i < NUM_RECORDS; i++) {
-            StructMemoryTrade trade = get(i);
+            final StructMemoryTrade trade = flyweight.get(i);
 
             trade.setTradeId(i);
             trade.setClientId(1);
@@ -105,73 +101,215 @@ public class TestStructMemoryLayout {
     }
 
     private static class StructMemoryTrade extends Struct {
+
         private Signed64 tradeId = new Signed64();
         private Signed64 clientId = new Signed64();
         private Signed32 venueCode = new Signed32();
         private Signed32 instrumentCode = new Signed32();
         private Signed64 price = new Signed64();
         private Signed64 quantity = new Signed64();
-        private Unsigned16 side = new Unsigned16();
+        private UTFChar16 side = new UTFChar16();
+
+        private ByteBuffer byteBuffer;
+
+        private int tradeIdIdx;
+        private int clientIdIdx;
+        private int venueCodeIdx;
+        private int instrumentCodeIdx;
+        private int priceIdx;
+        private int quantityIdx;
+        private int sideIdx;
+
+        public StructMemoryTrade get(final int index) {
+            final StructMemoryTrade smt = (StructMemoryTrade) setByteBufferPosition(index * size());
+            final int byteBufferPosition = getByteBufferPosition();
+
+            this.tradeIdIdx = byteBufferPosition + tradeId.offset();
+            this.clientIdIdx = byteBufferPosition + clientId.offset();
+            this.venueCodeIdx = byteBufferPosition + venueCode.offset();
+            this.instrumentCodeIdx = byteBufferPosition + instrumentCode.offset();
+            this.priceIdx = byteBufferPosition + price.offset();
+            this.quantityIdx = byteBufferPosition + quantity.offset();
+            this.sideIdx = byteBufferPosition + side.offset();
+
+            this.byteBuffer = getByteBuffer();
+
+            return smt;
+        }
 
         @Override
         public boolean isPacked() {
             return true;
         }
 
+/*
         public long getTradeId() {
-            return tradeId.get();
+            return byteBuffer.getLong(tradeIdIdx);
         }
 
         public void setTradeId(final long tradeId) {
-            this.tradeId.set(tradeId);
+            byteBuffer.putLong(tradeIdIdx, tradeId);
         }
 
         public long getClientId() {
-            return clientId.get();
+            return byteBuffer.getLong(clientIdIdx);
         }
 
         public void setClientId(final long clientId) {
-            this.clientId.set(clientId);
+            byteBuffer.putLong(clientIdIdx, clientId);
         }
 
         public int getVenueCode() {
-            return venueCode.get();
+            return byteBuffer.getInt(venueCodeIdx);
         }
 
         public void setVenueCode(final int venueCode) {
-            this.venueCode.set(venueCode);
+            byteBuffer.putInt(venueCodeIdx, venueCode);
         }
 
         public int getInstrumentCode() {
-            return instrumentCode.get();
+            return byteBuffer.getInt(instrumentCodeIdx);
         }
 
         public void setInstrumentCode(final int instrumentCode) {
-            this.instrumentCode.set(instrumentCode);
+            byteBuffer.putInt(instrumentCodeIdx, instrumentCode);
         }
 
         public long getPrice() {
-            return price.get();
+            return byteBuffer.getLong(priceIdx);
         }
 
         public void setPrice(final long price) {
-            this.price.set(price);
+            byteBuffer.putLong(priceIdx, price);
         }
 
         public long getQuantity() {
-            return quantity.get();
+            return byteBuffer.getLong(quantityIdx);
         }
 
         public void setQuantity(final long quantity) {
-            this.quantity.set(quantity);
+            byteBuffer.putLong(quantityIdx, quantity);
         }
 
         public char getSide() {
-            return (char) side.get();
+            return byteBuffer.getChar(sideIdx);
         }
 
         public void setSide(final char side) {
-            this.side.set(side);
+            byteBuffer.putChar(sideIdx, side);
+        }
+*/
+
+        public long getTradeId() {
+            if (byteBuffer != null) {
+                return byteBuffer.getLong(tradeIdIdx);
+            } else {
+                return tradeId.get();
+            }
+        }
+
+        public void setTradeId(final long tradeId) {
+            if (byteBuffer != null) {
+                byteBuffer.putLong(tradeIdIdx, tradeId);
+            } else {
+                this.tradeId.set(tradeId);
+            }
+        }
+
+        public long getClientId() {
+            if (byteBuffer != null) {
+                return byteBuffer.getLong(clientIdIdx);
+            } else {
+                return clientId.get();
+            }
+        }
+
+        public void setClientId(final long clientId) {
+            if (byteBuffer != null) {
+                byteBuffer.putLong(clientIdIdx, clientId);
+            } else {
+                this.clientId.set(clientId);
+            }
+        }
+
+        public int getVenueCode() {
+            if (byteBuffer != null) {
+                return byteBuffer.getInt(venueCodeIdx);
+            } else {
+                return venueCode.get();
+            }
+        }
+
+        public void setVenueCode(final int venueCode) {
+            if (byteBuffer != null) {
+                byteBuffer.putInt(venueCodeIdx, venueCode);
+            } else {
+                this.venueCode.set(venueCode);
+            }
+        }
+
+        public int getInstrumentCode() {
+            if (byteBuffer != null) {
+                return byteBuffer.getInt(instrumentCodeIdx);
+            } else {
+                return instrumentCode.get();
+            }
+        }
+
+        public void setInstrumentCode(final int instrumentCode) {
+            if (byteBuffer != null) {
+                byteBuffer.putInt(instrumentCodeIdx, instrumentCode);
+            } else {
+                this.instrumentCode.set(instrumentCode);
+            }
+        }
+
+        public long getPrice() {
+            if (byteBuffer != null) {
+                return byteBuffer.getLong(priceIdx);
+            } else {
+                return price.get();
+            }
+        }
+
+        public void setPrice(final long price) {
+            if (byteBuffer != null) {
+                byteBuffer.putLong(priceIdx, price);
+            } else {
+                this.price.set(price);
+            }
+        }
+
+        public long getQuantity() {
+            if (byteBuffer != null) {
+                return byteBuffer.getLong(quantityIdx);
+            } else {
+                return quantity.get();
+            }
+        }
+
+        public void setQuantity(final long quantity) {
+            if (byteBuffer != null) {
+                byteBuffer.putLong(quantityIdx, quantity);
+            } else {
+                this.quantity.set(quantity);
+            }
+        }
+
+        public char getSide() {
+            if (byteBuffer != null) {
+                return byteBuffer.getChar(sideIdx);
+            } else {
+                return (char) side.get();
+            }
+        }
+
+        public void setSide(final char side) {
+            if (byteBuffer != null) {
+                byteBuffer.putChar(sideIdx, side);
+            } else {
+                this.side.set(side);
+            }
         }
     }
 }
