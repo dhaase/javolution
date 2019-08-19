@@ -128,7 +128,7 @@ import java.nio.ByteOrder;
  * }}</p>
  * <p>
  * <p> Bit-fields are supported (see <code>Clock</code> example above).
- * Bit-fields allocation order is defined by the Struct {@link #byteOrder}
+ * Bit-fields allocation order is defined by the Struct {@link #_byteOrder}
  * return value. Leftmost bit to rightmost bit if
  * <code>BIG_ENDIAN</code> and rightmost bit to leftmost bit if
  * <code>LITTLE_ENDIAN</code> (same layout as Microsoft Visual C++).
@@ -201,10 +201,6 @@ public abstract class Struct {
      * Holds the byte buffer backing the struct (top struct).
      */
     ByteBuffer _byteBuffer;
-    /**
-     * Holds bytes array for Stream I/O when byteBuffer has no intrinsic array.
-     */
-    byte[] _bytes;
     /**
      * Holds the index position during construction.
      * This is the index a the first unused byte available.
@@ -508,24 +504,7 @@ public abstract class Struct {
         return array;
     }
 
-    /**
-     * Returns the byte order for this struct (configurable).
-     * The byte order is inherited by inner structs. Sub-classes may change
-     * the byte order by overriding this method. For example:[code]
-     * public class TopStruct extends Struct {
-     * ... // Members initialization.
-     * public ByteOrder byteOrder() {
-     * // TopStruct and its inner structs use hardware byte order.
-     * return ByteOrder.nativeOrder();
-     * }
-     * }}[/code]
-     *
-     * @return the byte order when reading/writing multibyte values
-     * (default: network byte order, <code>BIG_ENDIAN</code>).
-     */
-    public ByteOrder byteOrder() {
-        return (_outer != null) ? _outer.byteOrder() : ByteOrder.BIG_ENDIAN;
-    }
+    private final ByteOrder _byteOrder = ByteOrder.BIG_ENDIAN;
 
     /**
      * Returns the byte buffer for this struct. This method will allocate
@@ -554,8 +533,8 @@ public abstract class Struct {
      * in the byte buffer.
      */
     public final int getByteBufferPosition() {
-        return (_outer != null) ? _outer.getByteBufferPosition() + _outerOffset
-                : _outerOffset;
+        return (_outer != null ? _outer.getByteBufferPosition() + _outerOffset
+                : _outerOffset);
     }
 
     /**
@@ -581,7 +560,7 @@ public abstract class Struct {
     protected <S extends Struct> S inner(S struct) {
         if (struct._outer != null) throw new IllegalArgumentException(
                 "struct: Already an inner struct");
-        Member inner = new Member(struct.size() << 3, struct._alignment); // Update indexes.
+        final Member inner = new Member(struct.size() << 3, struct._alignment); // Update indexes.
         struct._outer = this;
         struct._outerOffset = inner.offset();
         return (S) struct;
@@ -636,7 +615,7 @@ public abstract class Struct {
     private synchronized ByteBuffer newBuffer() {
         if (_byteBuffer != null) return _byteBuffer; // Synchronized check.
         ByteBuffer bf = ByteBuffer.allocateDirect(size());
-        bf.order(byteOrder());
+        bf.order(_byteOrder);
         setByteBuffer(bf, 0);
         return _byteBuffer;
     }
@@ -684,9 +663,7 @@ public abstract class Struct {
             return bytesRead;
         } else {
             synchronized (byteBuffer) {
-                if (_bytes == null) {
-                    _bytes = new byte[size()];
-                }
+                final byte[] _bytes = new byte[size()];
                 int bytesRead = in.read(_bytes, 0, remaining);
                 byteBuffer.position(getByteBufferPosition() + alreadyRead);
                 byteBuffer.put(_bytes, 0, bytesRead);
@@ -714,7 +691,7 @@ public abstract class Struct {
                 "Attempt to read outside the Struct");
         int offset = bitOffset >> 3;
         int bitStart = bitOffset - (offset << 3);
-        bitStart = (byteOrder() == ByteOrder.BIG_ENDIAN) ? bitStart : 64
+        bitStart = (_byteOrder == ByteOrder.BIG_ENDIAN) ? bitStart : 64
                 - bitSize - bitStart;
         int index = getByteBufferPosition() + offset;
         long value = readByteBufferLong(byteBuffer, index);
@@ -724,9 +701,9 @@ public abstract class Struct {
     }
 
     private long readByteBufferLong(final ByteBuffer byteBuffer, int index) {
-        if (index + 8 < byteBuffer.limit()) return byteBuffer.getLong(index);
-        // Else possible buffer overflow.
-        if (byteBuffer.order() == ByteOrder.LITTLE_ENDIAN) {
+        if (index + 8 < byteBuffer.limit()) {
+            return byteBuffer.getLong(index);
+        } else if (byteBuffer.order() == ByteOrder.LITTLE_ENDIAN) {
             return (readByte(index, byteBuffer) & 0xff)
                     + ((readByte(++index, byteBuffer) & 0xff) << 8)
                     + ((readByte(++index, byteBuffer) & 0xff) << 16)
@@ -761,10 +738,10 @@ public abstract class Struct {
      * @throws IllegalArgumentException      if the specified byteBuffer has a
      *                                       different byte order than this struct.
      * @throws UnsupportedOperationException if this struct is an inner struct.
-     * @see #byteOrder()
+     * @see #_byteOrder
      */
-    public final Struct setByteBuffer(ByteBuffer byteBuffer, int position) {
-        if (byteBuffer.order() != byteOrder()) throw new IllegalArgumentException(
+    public final Struct setByteBuffer(final ByteBuffer byteBuffer, final int position) {
+        if (byteBuffer.order() != _byteOrder) throw new IllegalArgumentException(
                 "The byte order of the specified byte buffer"
                         + " is different from this struct byte order");
         if (_outer != null) throw new UnsupportedOperationException(
@@ -838,9 +815,7 @@ public abstract class Struct {
             out.write(byteBuffer.array(), offset, size());
         } else {
             synchronized (byteBuffer) {
-                if (_bytes == null) {
-                    _bytes = new byte[size()];
-                }
+                final byte[] _bytes = new byte[size()];
                 byteBuffer.position(getByteBufferPosition());
                 byteBuffer.get(_bytes);
                 out.write(_bytes);
@@ -866,7 +841,7 @@ public abstract class Struct {
         if ((bitOffset + bitSize - 1) >> 3 >= this.size()) throw new IllegalArgumentException(
                 "Attempt to write outside the Struct");
         int offset = bitOffset >> 3;
-        int bitStart = (byteOrder() == ByteOrder.BIG_ENDIAN) ? bitOffset
+        int bitStart = (_byteOrder == ByteOrder.BIG_ENDIAN) ? bitOffset
                 - (offset << 3) : 64 - bitSize - (bitOffset - (offset << 3));
         long mask = -1L;
         mask <<= bitStart; // Clears preceding bits
@@ -1030,7 +1005,7 @@ public abstract class Struct {
 
         // Returns the member int value.
         final int get(int wordSize, int word) {
-            final int shift = (byteOrder() == ByteOrder.BIG_ENDIAN) ? (wordSize << 3)
+            final int shift = (_byteOrder == ByteOrder.BIG_ENDIAN) ? (wordSize << 3)
                     - bitIndex() - bitLength()
                     : bitIndex();
             word >>= shift;
@@ -1040,7 +1015,7 @@ public abstract class Struct {
 
         // Returns the member long value.
         final long get(int wordSize, long word) {
-            final int shift = (byteOrder() == ByteOrder.BIG_ENDIAN) ? (wordSize << 3)
+            final int shift = (_byteOrder == ByteOrder.BIG_ENDIAN) ? (wordSize << 3)
                     - bitIndex() - bitLength()
                     : bitIndex();
             word >>= shift;
@@ -1060,7 +1035,7 @@ public abstract class Struct {
 
         // Sets the member int value.
         final int set(int value, int wordSize, int word) {
-            final int shift = (byteOrder() == ByteOrder.BIG_ENDIAN) ? (wordSize << 3)
+            final int shift = (_byteOrder == ByteOrder.BIG_ENDIAN) ? (wordSize << 3)
                     - bitIndex() - bitLength()
                     : bitIndex();
             int mask = 0xFFFFFFFF >>> (32 - bitLength());
@@ -1071,7 +1046,7 @@ public abstract class Struct {
 
         // Sets the member long value.
         final long set(long value, int wordSize, long word) {
-            final int shift = (byteOrder() == ByteOrder.BIG_ENDIAN) ? (wordSize << 3)
+            final int shift = (_byteOrder == ByteOrder.BIG_ENDIAN) ? (wordSize << 3)
                     - bitIndex() - bitLength()
                     : bitIndex();
             long mask = 0xFFFFFFFFFFFFFFFFL >>> (64 - bitLength());
