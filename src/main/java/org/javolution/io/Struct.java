@@ -188,6 +188,7 @@ public abstract class Struct {
             .getClass();
     private static final Class<? extends Unsigned8[]> UNSIGNED_8 = new Unsigned8[0]
             .getClass();
+    private final ByteOrder _byteOrder = ByteOrder.BIG_ENDIAN;
     /**
      * Holds this struct alignment in bytes (largest word size of its members).
      */
@@ -237,44 +238,17 @@ public abstract class Struct {
         _resetIndex = isUnion();
     }
 
-    private static byte readByte(int index, ByteBuffer byteBuffer) {
-        return (index < byteBuffer.limit()) ? byteBuffer.get(index) : 0;
-    }
-
     ///////////////////
     // CONFIGURATION //
     ///////////////////
 
-    private static void writeByte(int index, ByteBuffer byteBuffer, byte value) {
-        if (index < byteBuffer.limit()) {
-            byteBuffer.put(index, value);
-        }
+    private static byte readByte(final int index, final ByteBuffer byteBuffer) {
+        return (index < byteBuffer.limit()) ? byteBuffer.get(index) : 0;
     }
 
-    /**
-     * Returns this struct address (if supported by the platform).
-     * This method allows for structs to be referenced (e.g. pointer)
-     * from other structs.
-     *
-     * @return the struct memory address.
-     * @throws UnsupportedOperationException if not supported by the platform.
-     * @see Reference32
-     * @see Reference64
-     */
-    public final long address() {
-        try {
-            System.out.println("this.getByteBuffer().capacity(): " + this.getByteBuffer().capacity());
-            Class<?> dbClass = Class.forName("sun.nio.ch.DirectBuffer");
-            java.lang.reflect.Method address = dbClass.getDeclaredMethod(
-                    "address", new Class[0]);
-            long a = ((Long) address.invoke(this.getByteBuffer(),
-                    (Object[]) null)).longValue();
-            System.out.println("this.getByteBuffer().address(): " + a);
-            return a;
-        } catch (Throwable error) {
-            error.printStackTrace();
-            throw new UnsupportedOperationException(
-                    "Method Struct.address() not supported on this platform.");
+    private static void writeByte(final int index, final ByteBuffer byteBuffer, final byte value) {
+        if (index < byteBuffer.limit()) {
+            byteBuffer.put(index, value);
         }
     }
 
@@ -289,7 +263,7 @@ public abstract class Struct {
      * @throws IllegalArgumentException if the specified array contains
      *                                  inner structs.
      */
-    protected <S extends Struct> S[] array(S[] structs) {
+    protected <S extends Struct> S[] array(final S[] structs) {
         Class<?> structClass = null;
         boolean resetIndexSaved = _resetIndex;
         if (_resetIndex) {
@@ -332,7 +306,7 @@ public abstract class Struct {
      * @throws IllegalArgumentException if the specified array contains
      *                                  inner structs.
      */
-    protected <S extends Struct> S[][] array(S[][] structs) {
+    protected <S extends Struct> S[][] array(final S[][] structs) {
         boolean resetIndexSaved = _resetIndex;
         if (_resetIndex) {
             _index = 0;
@@ -356,7 +330,7 @@ public abstract class Struct {
      * @throws IllegalArgumentException if the specified array contains
      *                                  inner structs.
      */
-    protected <S extends Struct> S[][][] array(S[][][] structs) {
+    protected <S extends Struct> S[][][] array(final S[][][] structs) {
         boolean resetIndexSaved = _resetIndex;
         if (_resetIndex) {
             _index = 0;
@@ -380,7 +354,7 @@ public abstract class Struct {
      * @throws UnsupportedOperationException if the specified array
      *                                       is empty and the member type is unknown.
      */
-    protected <M extends AbstractMember> M[] array(M[] arrayMember) {
+    protected <M extends AbstractMember> M[] array(final M[] arrayMember) {
         boolean resetIndexSaved = _resetIndex;
         if (_resetIndex) {
             _index = 0;
@@ -446,7 +420,7 @@ public abstract class Struct {
      * @throws UnsupportedOperationException if the specified array
      *                                       is empty and the member type is unknown.
      */
-    protected <M extends AbstractMember> M[][] array(M[][] arrayMember) {
+    protected <M extends AbstractMember> M[][] array(final M[][] arrayMember) {
         boolean resetIndexSaved = _resetIndex;
         if (_resetIndex) {
             _index = 0;
@@ -470,7 +444,7 @@ public abstract class Struct {
      * @throws UnsupportedOperationException if the specified array
      *                                       is empty and the member type is unknown.
      */
-    protected <M extends AbstractMember> M[][][] array(M[][][] arrayMember) {
+    protected <M extends AbstractMember> M[][][] array(final M[][][] arrayMember) {
         boolean resetIndexSaved = _resetIndex;
         if (_resetIndex) {
             _index = 0;
@@ -491,7 +465,7 @@ public abstract class Struct {
      * @param stringLength the length of the string elements.
      * @return the specified string array.
      */
-    protected UTF8String[] array(UTF8String[] array, int stringLength) {
+    protected UTF8String[] array(final UTF8String[] array, final int stringLength) {
         boolean resetIndexSaved = _resetIndex;
         if (_resetIndex) {
             _index = 0;
@@ -503,8 +477,6 @@ public abstract class Struct {
         _resetIndex = resetIndexSaved;
         return array;
     }
-
-    private final ByteOrder _byteOrder = ByteOrder.BIG_ENDIAN;
 
     /**
      * Returns the byte buffer for this struct. This method will allocate
@@ -544,7 +516,7 @@ public abstract class Struct {
      * @return <code>this</code>
      * @throws UnsupportedOperationException if this struct is an inner struct.
      */
-    public final Struct setByteBufferPosition(int position) {
+    public final Struct setByteBufferPosition(final int position) {
         return setByteBuffer(this.getByteBuffer(), position);
     }
 
@@ -557,13 +529,13 @@ public abstract class Struct {
      * @throws IllegalArgumentException if the specified struct is already
      *                                  an inner struct.
      */
-    protected <S extends Struct> S inner(S struct) {
+    protected <S extends Struct> S inner(final S struct) {
         if (struct._outer != null) throw new IllegalArgumentException(
                 "struct: Already an inner struct");
         final Member inner = new Member(struct.size() << 3, struct._alignment); // Update indexes.
         struct._outer = this;
         struct._outerOffset = inner.offset();
-        return (S) struct;
+        return struct;
     }
 
     /**
@@ -613,8 +585,10 @@ public abstract class Struct {
     }
 
     private synchronized ByteBuffer newBuffer() {
-        if (_byteBuffer != null) return _byteBuffer; // Synchronized check.
-        ByteBuffer bf = ByteBuffer.allocateDirect(size());
+        if (_byteBuffer != null) {
+            return _byteBuffer; // Synchronized check.
+        }
+        final ByteBuffer bf = ByteBuffer.allocateDirect(size());
         bf.order(_byteOrder);
         setByteBuffer(bf, 0);
         return _byteBuffer;
@@ -630,7 +604,7 @@ public abstract class Struct {
         return _outer;
     }
 
-    public int read(InputStream in) throws IOException {
+    public int read(final InputStream in) throws IOException {
         return read(getByteBuffer(), in);
     }
 
@@ -765,7 +739,8 @@ public abstract class Struct {
      * @return the C/C++ <code>sizeof(this)</code>.
      */
     public final int size() {
-        return (_alignment <= 1) ? _length
+        return (_alignment <= 1)
+                ? _length
                 : ((_length + _alignment - 1) / _alignment) * _alignment;
     }
 
@@ -790,7 +765,7 @@ public abstract class Struct {
      * struct.
      */
     public String toString() {
-        TextBuilder tmp = new TextBuilder();
+        final TextBuilder tmp = new TextBuilder();
         final int size = size();
         final ByteBuffer buffer = getByteBuffer();
         final int start = getByteBufferPosition();
@@ -1186,7 +1161,7 @@ public abstract class Struct {
 
         private final T[] _values;
 
-        public Enum16(T[] values) {
+        public Enum16(final T[] values) {
             super(16, 2);
             _values = values;
         }
@@ -1262,8 +1237,8 @@ public abstract class Struct {
             final int value = e.ordinal();
             if (_values[value] != e) {
                 throw new IllegalArgumentException("enum: "
-                                + e
-                                + ", ordinal value does not reflect enum values position");
+                        + e
+                        + ", ordinal value does not reflect enum values position");
             }
             final int index = getByteBufferPosition() + offset();
             final int word = byteBuffer.getInt(index);
@@ -1310,8 +1285,8 @@ public abstract class Struct {
             final long value = e.ordinal();
             if (_values[(int) value] != e) {
                 throw new IllegalArgumentException("enum: "
-                                + e
-                                + ", ordinal value does not reflect enum values position");
+                        + e
+                        + ", ordinal value does not reflect enum values position");
             }
             final int index = getByteBufferPosition() + offset();
             final long word = byteBuffer.getLong(index);
@@ -1358,8 +1333,8 @@ public abstract class Struct {
             final int value = e.ordinal();
             if (_values[value] != e) {
                 throw new IllegalArgumentException("enum: "
-                                + e
-                                + ", ordinal value does not reflect enum values position");
+                        + e
+                        + ", ordinal value does not reflect enum values position");
             }
             final int index = getByteBufferPosition() + offset();
             final int word = byteBuffer.get(index);
@@ -1437,102 +1412,8 @@ public abstract class Struct {
 
     protected final class Member extends AbstractMember {
 
-        Member(int bitLength, int wordSize) {
+        Member(final int bitLength, final int wordSize) {
             super(bitLength, wordSize);
-        }
-    }
-
-    /**
-     * <p> This class represents a 32 bits reference (C/C++ pointer) to
-     * a {@link Struct} object (other types may require a {@link Struct}
-     * wrapper).</p>
-     * <p> Note: For references which can be externally modified, an application
-     * may want to check the {@link #isUpToDate up-to-date} status of
-     * the reference. For out-of-date references, a {@link Struct}
-     * can be created at the address specified by {@link #value}
-     * (using JNI) and the reference {@link #set set} accordingly.</p>
-     */
-    public final class Reference32<S extends Struct> extends AbstractMember {
-
-        private S _struct;
-
-        public Reference32() {
-            super(32, 4);
-        }
-
-        public S get() {
-            return _struct;
-        }
-
-        public boolean isUpToDate() {
-            final int index = getByteBufferPosition() + offset();
-            if (_struct != null) {
-                return getByteBuffer().getInt(index) == (int) _struct.address();
-            } else {
-                return getByteBuffer().getInt(index) == 0;
-            }
-        }
-
-        public void set(S struct) {
-            final int index = getByteBufferPosition() + offset();
-            if (struct != null) {
-                getByteBuffer().putInt(index, (int) struct.address());
-            } else {
-                getByteBuffer().putInt(index, 0);
-            }
-            _struct = struct;
-        }
-
-        public int value() {
-            final int index = getByteBufferPosition() + offset();
-            return getByteBuffer().getInt(index);
-        }
-    }
-
-    /**
-     * <p> This class represents a 64 bits reference (C/C++ pointer) to
-     * a {@link Struct} object (other types may require a {@link Struct}
-     * wrapper).</p>
-     * <p> Note: For references which can be externally modified, an application
-     * may want to check the {@link #isUpToDate up-to-date} status of
-     * the reference. For out-of-date references, a new {@link Struct}
-     * can be created at the address specified by {@link #value}
-     * (using JNI) and then {@link #set set} to the reference.</p>
-     */
-    public final class Reference64<S extends Struct> extends AbstractMember {
-
-        private S _struct;
-
-        public Reference64() {
-            super(64, 8);
-        }
-
-        public S get() {
-            return _struct;
-        }
-
-        public boolean isUpToDate() {
-            final int index = getByteBufferPosition() + offset();
-            if (_struct != null) {
-                return getByteBuffer().getLong(index) == _struct.address();
-            } else {
-                return getByteBuffer().getLong(index) == 0L;
-            }
-        }
-
-        public void set(S struct) {
-            final int index = getByteBufferPosition() + offset();
-            if (struct != null) {
-                getByteBuffer().putLong(index, struct.address());
-            } else if (struct == null) {
-                getByteBuffer().putLong(index, 0L);
-            }
-            _struct = struct;
-        }
-
-        public long value() {
-            final int index = getByteBufferPosition() + offset();
-            return getByteBuffer().getLong(index);
         }
     }
 
@@ -1555,7 +1436,7 @@ public abstract class Struct {
 
         public short get(final ByteBuffer byteBuffer) {
             final int index = getByteBufferPosition() + offset();
-            int word = byteBuffer.getShort(index);
+            final int word = byteBuffer.getShort(index);
             return (short) ((bitLength() == 16) ? word : get(2, word));
         }
 
@@ -1587,7 +1468,7 @@ public abstract class Struct {
             super(32, 4);
         }
 
-        public Signed32(int nbrOfBits) {
+        public Signed32(final int nbrOfBits) {
             super(nbrOfBits, 4);
         }
 
@@ -1671,7 +1552,7 @@ public abstract class Struct {
             super(8, 1);
         }
 
-        public Signed8(int nbrOfBits) {
+        public Signed8(final int nbrOfBits) {
             super(nbrOfBits, 1);
         }
 
@@ -1689,7 +1570,7 @@ public abstract class Struct {
             set(getByteBuffer(), value);
         }
 
-        public void set(final ByteBuffer byteBuffer,final byte value) {
+        public void set(final ByteBuffer byteBuffer, final byte value) {
             final int index = getByteBufferPosition() + offset();
             if (bitLength() == 8) {
                 byteBuffer.put(index, value);
@@ -1725,7 +1606,7 @@ public abstract class Struct {
 
         public String get(final ByteBuffer byteBuffer) {
             synchronized (byteBuffer) {
-                TextBuilder tmp = new TextBuilder();
+                final TextBuilder tmp = new TextBuilder();
                 try {
                     int index = getByteBufferPosition() + offset();
                     byteBuffer.position(index);
@@ -1797,7 +1678,7 @@ public abstract class Struct {
 
         public char get(final ByteBuffer byteBuffer) {
             final int index = getByteBufferPosition() + offset();
-            char word = byteBuffer.getChar(index);
+            final char word = byteBuffer.getChar(index);
             return (char) ((bitLength() == 16) ? word : get(2, word));
         }
 

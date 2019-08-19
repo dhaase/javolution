@@ -70,7 +70,6 @@ public class StructTest {
         public final Date birth = inner(new Date());
         public final Signed64 number1 = new Signed64();
         public final Float32[] grades = array(new Float32[10]);
-        public final Reference32<Student> next = new Reference32<Student>();
         public final Signed64 number2 = new Signed64();
     }
 }
