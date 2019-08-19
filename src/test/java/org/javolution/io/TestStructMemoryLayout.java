@@ -111,6 +111,7 @@ public class TestStructMemoryLayout {
         private UTFChar16 side = new UTFChar16();
 
         private ByteBuffer byteBuffer;
+        private ByteBuffer byteBuffer2;
 
         private int tradeIdIdx;
         private int clientIdIdx;
@@ -133,6 +134,7 @@ public class TestStructMemoryLayout {
             this.sideIdx = byteBufferPosition + side.offset();
 
             this.byteBuffer = getByteBuffer();
+            this.byteBuffer2 = getByteBuffer();
 
             return smt;
         }
@@ -142,69 +144,12 @@ public class TestStructMemoryLayout {
             return true;
         }
 
-/*
-        public long getTradeId() {
-            return byteBuffer.getLong(tradeIdIdx);
-        }
-
-        public void setTradeId(final long tradeId) {
-            byteBuffer.putLong(tradeIdIdx, tradeId);
-        }
-
-        public long getClientId() {
-            return byteBuffer.getLong(clientIdIdx);
-        }
-
-        public void setClientId(final long clientId) {
-            byteBuffer.putLong(clientIdIdx, clientId);
-        }
-
-        public int getVenueCode() {
-            return byteBuffer.getInt(venueCodeIdx);
-        }
-
-        public void setVenueCode(final int venueCode) {
-            byteBuffer.putInt(venueCodeIdx, venueCode);
-        }
-
-        public int getInstrumentCode() {
-            return byteBuffer.getInt(instrumentCodeIdx);
-        }
-
-        public void setInstrumentCode(final int instrumentCode) {
-            byteBuffer.putInt(instrumentCodeIdx, instrumentCode);
-        }
-
-        public long getPrice() {
-            return byteBuffer.getLong(priceIdx);
-        }
-
-        public void setPrice(final long price) {
-            byteBuffer.putLong(priceIdx, price);
-        }
-
-        public long getQuantity() {
-            return byteBuffer.getLong(quantityIdx);
-        }
-
-        public void setQuantity(final long quantity) {
-            byteBuffer.putLong(quantityIdx, quantity);
-        }
-
-        public char getSide() {
-            return byteBuffer.getChar(sideIdx);
-        }
-
-        public void setSide(final char side) {
-            byteBuffer.putChar(sideIdx, side);
-        }
-*/
 
         public long getTradeId() {
             if (byteBuffer != null) {
                 return byteBuffer.getLong(tradeIdIdx);
             } else {
-                return tradeId.get();
+                return tradeId.get(this.byteBuffer2);
             }
         }
 
@@ -212,7 +157,7 @@ public class TestStructMemoryLayout {
             if (byteBuffer != null) {
                 byteBuffer.putLong(tradeIdIdx, tradeId);
             } else {
-                this.tradeId.set(tradeId);
+                this.tradeId.set(this.byteBuffer2, tradeId);
             }
         }
 
@@ -220,7 +165,7 @@ public class TestStructMemoryLayout {
             if (byteBuffer != null) {
                 return byteBuffer.getLong(clientIdIdx);
             } else {
-                return clientId.get();
+                return clientId.get(this.byteBuffer2);
             }
         }
 
@@ -228,7 +173,7 @@ public class TestStructMemoryLayout {
             if (byteBuffer != null) {
                 byteBuffer.putLong(clientIdIdx, clientId);
             } else {
-                this.clientId.set(clientId);
+                this.clientId.set(this.byteBuffer2, clientId);
             }
         }
 
@@ -236,7 +181,7 @@ public class TestStructMemoryLayout {
             if (byteBuffer != null) {
                 return byteBuffer.getInt(venueCodeIdx);
             } else {
-                return venueCode.get();
+                return venueCode.get(this.byteBuffer2);
             }
         }
 
@@ -244,7 +189,7 @@ public class TestStructMemoryLayout {
             if (byteBuffer != null) {
                 byteBuffer.putInt(venueCodeIdx, venueCode);
             } else {
-                this.venueCode.set(venueCode);
+                this.venueCode.set(this.byteBuffer2, venueCode);
             }
         }
 
@@ -252,7 +197,7 @@ public class TestStructMemoryLayout {
             if (byteBuffer != null) {
                 return byteBuffer.getInt(instrumentCodeIdx);
             } else {
-                return instrumentCode.get();
+                return instrumentCode.get(this.byteBuffer2);
             }
         }
 
@@ -260,7 +205,7 @@ public class TestStructMemoryLayout {
             if (byteBuffer != null) {
                 byteBuffer.putInt(instrumentCodeIdx, instrumentCode);
             } else {
-                this.instrumentCode.set(instrumentCode);
+                this.instrumentCode.set(this.byteBuffer2, instrumentCode);
             }
         }
 
@@ -268,7 +213,7 @@ public class TestStructMemoryLayout {
             if (byteBuffer != null) {
                 return byteBuffer.getLong(priceIdx);
             } else {
-                return price.get();
+                return price.get(this.byteBuffer2);
             }
         }
 
@@ -276,7 +221,7 @@ public class TestStructMemoryLayout {
             if (byteBuffer != null) {
                 byteBuffer.putLong(priceIdx, price);
             } else {
-                this.price.set(price);
+                this.price.set(this.byteBuffer2, price);
             }
         }
 
@@ -284,7 +229,7 @@ public class TestStructMemoryLayout {
             if (byteBuffer != null) {
                 return byteBuffer.getLong(quantityIdx);
             } else {
-                return quantity.get();
+                return quantity.get(this.byteBuffer2);
             }
         }
 
@@ -292,7 +237,7 @@ public class TestStructMemoryLayout {
             if (byteBuffer != null) {
                 byteBuffer.putLong(quantityIdx, quantity);
             } else {
-                this.quantity.set(quantity);
+                this.quantity.set(this.byteBuffer2, quantity);
             }
         }
 
@@ -300,7 +245,7 @@ public class TestStructMemoryLayout {
             if (byteBuffer != null) {
                 return byteBuffer.getChar(sideIdx);
             } else {
-                return (char) side.get();
+                return (char) side.get(this.byteBuffer2);
             }
         }
 
@@ -308,7 +253,7 @@ public class TestStructMemoryLayout {
             if (byteBuffer != null) {
                 byteBuffer.putChar(sideIdx, side);
             } else {
-                this.side.set(side);
+                this.side.set(this.byteBuffer2, side);
             }
         }
     }
