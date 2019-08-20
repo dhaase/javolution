@@ -478,6 +478,24 @@ public abstract class Struct {
         return array;
     }
 
+    public final void clear() {
+        clear(getByteBuffer());
+    }
+
+    public final void clear(final ByteBuffer byteBuffer) {
+        final int position = byteBuffer.position();
+        final int limit = byteBuffer.limit();
+        final int mark = byteBuffer.reset().position();
+        byteBuffer.position(position);
+        for (int i = 0; size() > i; ++i) {
+            byteBuffer.put((byte) 0);
+        }
+        byteBuffer.position(mark);
+        byteBuffer.mark();
+        byteBuffer.limit(limit);
+        byteBuffer.position(position);
+    }
+
     /**
      * Returns the byte buffer for this struct. This method will allocate
      * a new <b>direct</b> buffer if none has been set.
@@ -1672,6 +1690,14 @@ public abstract class Struct {
             super(nbrOfBits, 2);
         }
 
+        public void set(final CharSequence single) {
+            set(getByteBuffer(), single.charAt(0));
+        }
+
+        public void set(final ByteBuffer byteBuffer, final CharSequence single) {
+            set(byteBuffer, single.charAt(0));
+        }
+
         public char get() {
             return get(getByteBuffer());
         }
@@ -1722,6 +1748,14 @@ public abstract class Struct {
             final int index = getByteBufferPosition() + offset();
             final int word = byteBuffer.get(index);
             return (char) (0xFF & ((bitLength() == 8) ? word : get(1, word)));
+        }
+
+        public void set(final CharSequence single) {
+            set(getByteBuffer(), single.charAt(0));
+        }
+
+        public void set(final ByteBuffer byteBuffer, final CharSequence single) {
+            set(byteBuffer, single.charAt(0));
         }
 
         public void set(final char value) {
