@@ -8,10 +8,6 @@
  */
 package org.javolution.io;
 
-import org.javolution.annotations.Realtime;
-import org.javolution.lang.MathLib;
-import org.javolution.text.TextBuilder;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -153,19 +149,7 @@ import java.nio.ByteOrder;
  * @version 5.5.1, April 1, 2010
  */
 @SuppressWarnings("unchecked")
-@Realtime
 public abstract class Struct {
-
-    /**
-     * Configurable holding the maximum wordSize in bytes
-     * (default <code>4</code>). Should be a value greater or equal to 1.
-     */
-//    public static final LocalContext.Parameter<Integer> MAXIMUM_ALIGNMENT = new LocalContext.Parameter<Integer>() {
-//        @Override
-//        protected Integer getDefault() {
-//            return 4;
-//        }
-//    };
 
     private static final Class<? extends Bool[]> BOOL = new Bool[0].getClass();
     private static final Class<? extends Float32[]> FLOAT_32 = new Float32[0]
@@ -237,10 +221,6 @@ public abstract class Struct {
     protected Struct() {
         _resetIndex = isUnion();
     }
-
-    ///////////////////
-    // CONFIGURATION //
-    ///////////////////
 
     private static byte readByte(final int index, final ByteBuffer byteBuffer) {
         return (index < byteBuffer.limit()) ? byteBuffer.get(index) : 0;
@@ -483,17 +463,10 @@ public abstract class Struct {
     }
 
     public final void clear(final ByteBuffer byteBuffer) {
-        final int position = byteBuffer.position();
-        final int limit = byteBuffer.limit();
-        final int mark = byteBuffer.reset().position();
-        byteBuffer.position(position);
-        for (int i = 0; size() > i; ++i) {
-            byteBuffer.put((byte) 0);
+        final int size = size();
+        for (int index = getByteBufferPosition(); size > index; ++index) {
+            byteBuffer.put(index, (byte) 0);
         }
-        byteBuffer.position(mark);
-        byteBuffer.mark();
-        byteBuffer.limit(limit);
-        byteBuffer.position(position);
     }
 
     /**
@@ -523,7 +496,8 @@ public abstract class Struct {
      * in the byte buffer.
      */
     public final int getByteBufferPosition() {
-        return (_outer != null ? _outer.getByteBufferPosition() + _outerOffset
+        return (_outer != null
+                ? _outer.getByteBufferPosition() + _outerOffset
                 : _outerOffset);
     }
 
@@ -548,8 +522,9 @@ public abstract class Struct {
      *                                  an inner struct.
      */
     protected <S extends Struct> S inner(final S struct) {
-        if (struct._outer != null) throw new IllegalArgumentException(
-                "struct: Already an inner struct");
+        if (struct._outer != null) {
+            throw new IllegalArgumentException("struct: Already an inner struct");
+        }
         final Member inner = new Member(struct.size() << 3, struct._alignment); // Update indexes.
         struct._outer = this;
         struct._outerOffset = inner.offset();
@@ -783,7 +758,7 @@ public abstract class Struct {
      * struct.
      */
     public String toString() {
-        final TextBuilder tmp = new TextBuilder();
+        final StringBuilder tmp = new StringBuilder();
         final int size = size();
         final ByteBuffer buffer = getByteBuffer();
         final int start = getByteBufferPosition();
@@ -879,10 +854,6 @@ public abstract class Struct {
         }
     }
 
-    /////////////
-    // MEMBERS //
-    /////////////
-
     /**
      * This inner class represents the base class for all {@link Struct}
      * members. It allows applications to define additional member types.
@@ -949,7 +920,7 @@ public abstract class Struct {
                 while (_bitsUsed > (_wordSize << 3)) {
                     _index++;
                     _wordSize++;
-                    _length = MathLib.max(_length, _index);
+                    _length = Math.max(_length, _index);
                 }
                 return; // Bit field merge done.
             }
@@ -974,10 +945,10 @@ public abstract class Struct {
             _bitIndex = 0;
 
             // Update struct indices.
-            _index += MathLib.max(wordSize, (bitLength + 7) >> 3);
+            _index += Math.max(wordSize, (bitLength + 7) >> 3);
             _wordSize = wordSize;
             _bitsUsed = bitLength;
-            _length = MathLib.max(_length, _index);
+            _length = Math.max(_length, _index);
             // size and index may differ because of {@link Union}
         }
 
@@ -1122,10 +1093,6 @@ public abstract class Struct {
             return String.valueOf(longValue());
         }
     }
-
-    ///////////////////////
-    // PREDEFINED FIELDS //
-    ///////////////////////
 
     /**
      * This class represents a 8 bits boolean with <code>true</code> represented
@@ -1624,7 +1591,7 @@ public abstract class Struct {
 
         public String get(final ByteBuffer byteBuffer) {
             synchronized (byteBuffer) {
-                final TextBuilder tmp = new TextBuilder();
+                final StringBuilder tmp = new StringBuilder();
                 try {
                     int index = getByteBufferPosition() + offset();
                     byteBuffer.position(index);
